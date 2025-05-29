@@ -18,9 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useDoc, updateDocumentNonBlocking } from '@/firebase';
-import { doc, DocumentReference } from 'firebase/firestore';
+import { doc, type DocumentReference } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { UserProfileSchema, type User as AppUser } from '@/lib/firebase-schemas';
+import { UserProfileSchema, type User as AppUser, type UserProfile } from '@/lib/firebase-schemas';
 import { useEffect, useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,13 +60,30 @@ export function ProfileForm() {
 
   useEffect(() => {
     if (userData) {
+      const profileDataToParse = { ...(userData.profile || {}) }; // Create a mutable copy or use default if undefined/null
+
+      // Check and correct 'goal' if it's an invalid enum value from old data
+      const goalEnumValues = UserProfileSchema.shape.goal.options; // Get valid enum values for goal
+      if (profileDataToParse.goal && !goalEnumValues.includes(profileDataToParse.goal as any)) {
+        // If goal exists and is not a valid enum member, reset it to the schema's default.
+        // UserProfileSchema.shape.goal.parse(undefined) will yield the default value ("5K").
+        profileDataToParse.goal = UserProfileSchema.shape.goal.parse(undefined);
+      }
+
+      // Now parse the potentially corrected profile data.
+      // This ensures that if 'goal' was invalid, it's now fixed,
+      // and other missing fields in profileDataToParse get their schema defaults.
+      const parsedProfile = UserProfileSchema.parse(profileDataToParse);
+
       form.reset({
         firstName: userData.firstName,
         lastName: userData.lastName,
         email: userData.email,
-        profile: UserProfileSchema.parse(userData.profile || {}), // Ensure profile is parsed against schema for defaults
+        profile: parsedProfile,
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
+      // This branch is for new users or users without a profile document yet.
+      // UserProfileSchema.parse({}) will correctly apply all defaults from the schema.
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
@@ -74,6 +91,7 @@ export function ProfileForm() {
         profile: UserProfileSchema.parse({}), 
       });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData, authUser, form, isUserDataLoading, userDataError]);
 
   const onSubmit = async (data: ProfileFormValues) => {
