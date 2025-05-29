@@ -63,7 +63,8 @@ export function ProfileForm() {
       const profileDataToParse = { ...(userData.profile || {}) }; // Create a mutable copy or use default if undefined/null
 
       // Check and correct 'goal' if it's an invalid enum value from old data
-      const goalEnumValues = UserProfileSchema.shape.goal.unwrap().options; // Get valid enum values from the unwrapped ZodEnum
+      const goalEnumValues = UserProfileSchema.shape.goal.options; // Attempting direct access to options
+
       if (profileDataToParse.goal && !goalEnumValues.includes(profileDataToParse.goal as any)) {
         // If goal exists and is not a valid enum member, reset it to the schema's default.
         // UserProfileSchema.shape.goal.parse(undefined) will yield the default value ("5K").
