@@ -1,8 +1,10 @@
 
 import { z } from 'zod';
 
+const daysOfWeekEnum = z.enum(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+
 export const UserProfileSchema = z.object({
-  fitnessLevel: z.enum(['Beginner', 'Intermediate', 'Advanced']).default('Beginner'), // Retaining internal name, label will change
+  fitnessLevel: z.enum(['Beginner', 'Intermediate', 'Advanced']).default('Beginner'),
   runningExperience: z.string().min(1, "Running experience is required.").default("Not set"),
   goal: z.enum(["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"]).default("5K"),
   daysPerWeek: z.number().min(1).max(7).default(3),
@@ -12,6 +14,7 @@ export const UserProfileSchema = z.object({
   newsSources: z.array(z.string()).optional().default([]), // e.g., ["Runner's World"]
   locationCity: z.string().optional().default(""),
   weatherUnit: z.enum(['C', 'F']).default('C'),
+  preferredLongRunDay: daysOfWeekEnum.default('Sunday'),
 });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
@@ -31,6 +34,7 @@ export const UserSchema = z.object({
     newsSources: [],
     locationCity: '',
     weatherUnit: 'C',
+    preferredLongRunDay: 'Sunday',
   }),
   trainingPlanId: z.string().nullable().optional(),
 });
@@ -50,10 +54,11 @@ export const TrainingPlanSchema = z.object({
   startDate: z.string(), // ISO date string
   endDate: z.string(), // ISO date string
   rawPlanText: z.string(),
-  fitnessLevel: UserProfileSchema.shape.fitnessLevel, // Keep name 'fitnessLevel' for data consistency
+  fitnessLevel: UserProfileSchema.shape.fitnessLevel,
   runningExperience: UserProfileSchema.shape.runningExperience,
-  goal: UserProfileSchema.shape.goal, // Will store the selected race distance
+  goal: UserProfileSchema.shape.goal,
   daysPerWeek: UserProfileSchema.shape.daysPerWeek,
+  preferredLongRunDay: UserProfileSchema.shape.preferredLongRunDay.optional(), // Keep optional here for existing plans
 });
 export type TrainingPlan = z.infer<typeof TrainingPlanSchema>;
 
@@ -72,4 +77,3 @@ export const DashboardCacheSchema = z.object({
   runningNews: z.array(z.string()),
 });
 export type DashboardCache = z.infer<typeof DashboardCacheSchema>;
-

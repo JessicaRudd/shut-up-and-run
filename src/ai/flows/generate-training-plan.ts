@@ -12,6 +12,8 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
+const daysOfWeekEnum = z.enum(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+
 const GenerateTrainingPlanInputSchema = z.object({
   fitnessLevel: z
     .enum(['Beginner', 'Intermediate', 'Advanced'])
@@ -38,6 +40,9 @@ const GenerateTrainingPlanInputSchema = z.object({
     .string()
     .optional()
     .describe('The optional target race date (YYYY-MM-DD). If provided, the plan will be built around this date.'),
+  preferredLongRunDay: daysOfWeekEnum
+    .optional()
+    .describe('The user preferred day for long runs (e.g., Sunday).'),
   additionalNotes: z
     .string()
     .optional()
@@ -74,6 +79,9 @@ const prompt = ai.definePrompt({
   {{else}}
   Calculated End Date for Plan: {{{endDate}}}
   {{/if}}
+  {{#if preferredLongRunDay}}
+  Preferred Long Run Day: {{{preferredLongRunDay}}}
+  {{/if}}
   Additional Notes: {{{additionalNotes}}}
 
   The training plan should include specific workouts for each day, formatted clearly.
@@ -88,6 +96,9 @@ const prompt = ai.definePrompt({
   The training plan should be formatted for readability (e.g. using markdown-like list for workout details under each date).
   Organize the plan by weeks (e.g., "Week 1", "Week 2", etc.) as main headers if appropriate for the plan length.
   Ensure the plan is tailored to the user's running level, experience, goal, and the number of days per week they can train.
+  {{#if preferredLongRunDay}}
+  If possible, schedule the weekly long run on the user's Preferred Long Run Day: {{{preferredLongRunDay}}}. If it's not feasible for a particular week due to the training structure (e.g., a race or specific recovery needs), choose the next most appropriate day and briefly note why if it deviates significantly from the preference.
+  {{/if}}
   {{#if targetRaceDate}}
   Structure the plan to build towards the Target Race Date. The plan must end on or just before the Target Race Date.
   {{else}}
@@ -110,4 +121,3 @@ const generateTrainingPlanFlow = ai.defineFlow(
     return output!;
   }
 );
-

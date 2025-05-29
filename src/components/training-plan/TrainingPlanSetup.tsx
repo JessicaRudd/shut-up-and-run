@@ -24,18 +24,21 @@ import { useUser, useFirestore, setDocumentNonBlocking, updateDocumentNonBlockin
 import { doc, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { User as AppUser, TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
-import { UserProfileSchema } from '@/lib/firebase-schemas'; // UserProfileSchema.shape.goal is now an enum
+import { UserProfileSchema } from '@/lib/firebase-schemas';
 import { useState, useEffect } from 'react';
 import { generateTrainingPlan } from '@/ai/flows';
 import { format, addDays, differenceInCalendarDays, isValid } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
 const TrainingPlanSetupSchema = z.object({
   fitnessLevel: UserProfileSchema.shape.fitnessLevel,
   runningExperience: UserProfileSchema.shape.runningExperience,
-  goal: UserProfileSchema.shape.goal, // This is now an enum from UserProfileSchema
+  goal: UserProfileSchema.shape.goal,
   daysPerWeek: UserProfileSchema.shape.daysPerWeek,
+  preferredLongRunDay: UserProfileSchema.shape.preferredLongRunDay,
   startDate: z.date({ required_error: "Start date is required." }),
   targetRaceDate: z.date().optional(),
   durationWeeks: z.number().min(1, "Duration must be at least 1 week.").max(52, "Duration cannot exceed 52 weeks."),
@@ -70,6 +73,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
       runningExperience: currentUserData.profile.runningExperience,
       goal: currentUserData.profile.goal,
       daysPerWeek: currentUserData.profile.daysPerWeek,
+      preferredLongRunDay: currentUserData.profile.preferredLongRunDay,
       startDate: new Date(),
       targetRaceDate: undefined,
       durationWeeks: 12, 
@@ -100,13 +104,14 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
       runningExperience: currentUserData.profile.runningExperience,
       goal: currentUserData.profile.goal,
       daysPerWeek: currentUserData.profile.daysPerWeek,
+      preferredLongRunDay: currentUserData.profile.preferredLongRunDay,
       startDate: getValues("startDate") || new Date(),
       targetRaceDate: getValues("targetRaceDate"),
       durationWeeks: getValues("durationWeeks") || 12,
       additionalNotes: getValues("additionalNotes") || '',
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUserData, form.reset]); // form.getValues removed from deps as it causes loop, rely on currentUserData
+  }, [currentUserData, form.reset]);
 
 
   const onSubmit = async (data: TrainingPlanSetupValues) => {
@@ -129,6 +134,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
         runningExperience: data.runningExperience,
         goal: data.goal,
         daysPerWeek: data.daysPerWeek,
+        preferredLongRunDay: data.preferredLongRunDay,
         startDate: format(data.startDate, 'yyyy-MM-dd'),
         endDate: format(calculatedEndDate, 'yyyy-MM-dd'),
         targetRaceDate: data.targetRaceDate ? format(data.targetRaceDate, 'yyyy-MM-dd') : undefined,
@@ -150,6 +156,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
         runningExperience: data.runningExperience,
         goal: data.goal,
         daysPerWeek: data.daysPerWeek,
+        preferredLongRunDay: data.preferredLongRunDay,
       };
       
       setDocumentNonBlocking(newPlanRef, newPlanData, {});
@@ -238,28 +245,52 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="goal"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Primary Goal (Race Distance)</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger><SelectValue placeholder="Select your target race" /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="5K">5K</SelectItem>
-                      <SelectItem value="10K">10K</SelectItem>
-                      <SelectItem value="Half Marathon">Half Marathon</SelectItem>
-                      <SelectItem value="Marathon">Marathon</SelectItem>
-                      <SelectItem value="50K/Ultramarathon">50K/Ultramarathon</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="goal"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Primary Goal (Race Distance)</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Select your target race" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="5K">5K</SelectItem>
+                        <SelectItem value="10K">10K</SelectItem>
+                        <SelectItem value="Half Marathon">Half Marathon</SelectItem>
+                        <SelectItem value="Marathon">Marathon</SelectItem>
+                        <SelectItem value="50K/Ultramarathon">50K/Ultramarathon</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                  control={form.control}
+                  name="preferredLongRunDay"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Preferred Long Run Day</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select preferred day" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {daysOfWeek.map(day => (
+                            <SelectItem key={day} value={day}>{day}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -384,4 +415,3 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
     </Card>
   );
 }
-

@@ -30,10 +30,12 @@ const ProfileFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   email: z.string().email(), // Display only, not editable via this form for simplicity
-  profile: UserProfileSchema, // UserProfileSchema now includes locationCity and weatherUnit
+  profile: UserProfileSchema,
 });
 
 type ProfileFormValues = z.infer<typeof ProfileFormSchema>;
+
+const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 export function ProfileForm() {
   const { user: authUser, isUserLoading: isAuthUserLoading } = useUser();
@@ -54,29 +56,30 @@ export function ProfileForm() {
       firstName: '',
       lastName: '',
       email: '',
-      profile: UserProfileSchema.parse({}), // Initialize with valid defaults from schema
+      profile: UserProfileSchema.parse({}), 
     },
   });
 
   useEffect(() => {
     if (userData) {
-      const profileDataToParse = { ...(userData.profile || {}) }; 
-
-      // Check and correct 'goal' if it's an invalid enum value from old data
+      const profileDataToParse = { ...(userData.profile || {}) };
       const validGoalEnumValues = ["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"];
 
       if (profileDataToParse.goal && !validGoalEnumValues.includes(profileDataToParse.goal as any)) {
-        // If goal exists and is not a valid enum member, reset it to the schema's default.
         try {
-          // UserProfileSchema.shape.goal.parse(undefined) should yield the default value ("5K").
           profileDataToParse.goal = UserProfileSchema.shape.goal.parse(undefined);
         } catch (parseError) {
             console.warn("Failed to parse default goal using Zod schema, falling back to hardcoded default '5K'. Error:", parseError);
-            profileDataToParse.goal = "5K"; // Hardcoded default if .parse(undefined) fails
+            profileDataToParse.goal = "5K";
         }
       }
+      
+      // Ensure preferredLongRunDay has a default if it's missing from existing data
+      if (!profileDataToParse.preferredLongRunDay) {
+        profileDataToParse.preferredLongRunDay = UserProfileSchema.shape.preferredLongRunDay.parse(undefined);
+      }
 
-      // Now parse the potentially corrected profile data.
+
       const parsedProfile = UserProfileSchema.parse(profileDataToParse);
 
       form.reset({
@@ -86,13 +89,11 @@ export function ProfileForm() {
         profile: parsedProfile,
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
-      // This branch is for new users or users without a profile document yet.
-      // UserProfileSchema.parse({}) will correctly apply all defaults from the schema.
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
         email: authUser.email || '',
-        profile: UserProfileSchema.parse({}), 
+        profile: UserProfileSchema.parse({}),
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -108,7 +109,7 @@ export function ProfileForm() {
       const updateData: Partial<AppUser> = {
         firstName: data.firstName,
         lastName: data.lastName,
-        profile: data.profile, // This now includes locationCity and weatherUnit
+        profile: data.profile,
       };
       updateDocumentNonBlocking(userDocRef, updateData);
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
@@ -253,28 +254,53 @@ export function ProfileForm() {
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="profile.daysPerWeek"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Training Days Per Week</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select days" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 5, 6, 7].map(day => (
-                        <SelectItem key={day} value={String(day)}>{day} day{day > 1 ? 's' : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="profile.daysPerWeek"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Training Days Per Week</FormLabel>
+                    <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select days" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                          <SelectItem key={day} value={String(day)}>{day} day{day > 1 ? 's' : ''}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="profile.preferredLongRunDay"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Preferred Long Run Day</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select preferred day" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {daysOfWeek.map(day => (
+                          <SelectItem key={day} value={day}>{day}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
 
             <h3 className="text-lg font-medium pt-4 border-t">Weather & Location Preferences</h3>
              <FormField
@@ -367,4 +393,3 @@ export function ProfileForm() {
     </Card>
   );
 }
-
