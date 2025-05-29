@@ -1,38 +1,36 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access.  This might be adjusted based on which data should really be public.
-    match /{document=**} {
-      allow read: if true;
-    }
 
-    // Rules for the 'users' collection
+    // Users collection:
+    // - Authenticated users can read their own document.
+    // - Authenticated users can create their own document (e.g., on signup).
+    // - Authenticated users can update their own document.
+    // - Deleting user documents from the client is disallowed.
     match /users/{userId} {
-      // Allow read/write access to authenticated users if they own the document
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-
-      // Validation: Email must be a valid email format
-      allow create: if request.auth != null && request.resource.data.email is String && request.resource.data.email.matches('^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // Generally safer to handle deletions server-side or not at all from client
     }
 
-    // Rules for the 'trainingPlans' collection
-    match /trainingPlans/{trainingPlanId} {
-      // Allow read/write access to authenticated users if they own the training plan (userId matches)
-      allow read, write: if request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && request.resource.data.userId == request.auth.uid;
+    // TrainingPlans collection:
+    // - Users can read, create, and update training plans where their userId matches.
+    // - Users can delete their own training plans.
+    match /trainingPlans/{planId} {
+      allow read, create, update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    // Rules for the 'weatherCache' collection
-    match /weatherCache/{weatherCacheId} {
-      // Allow read access to all authenticated users. Write is restricted.
-      allow read: if request.auth != null;
-	    allow write: if false; //Prevent writes for all users (only backend processes should write to this).
-
+    // DashboardCache collection:
+    // - Users can read, create, and update their own dashboard cache entry.
+    //   The document ID is the userId, and we also check the userId field within the document.
+    // - Users can delete their own dashboard cache.
+    match /dashboardCache/{userId} {
+      allow read, create, update: if request.auth != null && request.auth.uid == userId && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && request.auth.uid == userId && resource.data.userId == request.auth.uid;
     }
-
-    // Rules for the 'dashboardCache' collection
-    match /dashboardCache/{dashboardCacheId} {
-      // Allow read/write access to authenticated users if they own the dashboard cache (userId matches).
-      allow read, write: if request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && request.resource.data.userId == request.auth.uid;
-	  }
   }
 }
