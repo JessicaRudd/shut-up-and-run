@@ -1,9 +1,10 @@
+
 import { z } from 'zod';
 
 export const UserProfileSchema = z.object({
   fitnessLevel: z.enum(['Beginner', 'Intermediate', 'Advanced']).default('Beginner'),
-  runningExperience: z.string().min(1, "Running experience is required.").default(""),
-  goal: z.string().min(1, "Goal is required.").default(""),
+  runningExperience: z.string().min(1, "Running experience is required.").default("Not set"),
+  goal: z.string().min(1, "Goal is required.").default("Not set"),
   daysPerWeek: z.number().min(1).max(7).default(3),
   preferredWorkoutTypes: z.string().optional().default(""), // e.g., "running, yoga"
   availableTime: z.string().optional().default(""), // e.g., "30 minutes"
@@ -19,8 +20,8 @@ export const UserSchema = z.object({
   lastName: z.string().min(1, "Last name is required."),
   profile: UserProfileSchema.default({
     fitnessLevel: 'Beginner',
-    runningExperience: '',
-    goal: '',
+    runningExperience: 'Not set', // Ensure this default is valid
+    goal: 'Not set',             // Ensure this default is valid
     daysPerWeek: 3,
     preferredWorkoutTypes: '',
     availableTime: '',

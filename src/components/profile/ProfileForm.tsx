@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -54,16 +55,7 @@ export function ProfileForm() {
       firstName: '',
       lastName: '',
       email: '',
-      profile: {
-        fitnessLevel: 'Beginner',
-        runningExperience: '',
-        goal: '',
-        daysPerWeek: 3,
-        preferredWorkoutTypes: '',
-        availableTime: '',
-        equipmentAvailable: '',
-        newsSources: [],
-      },
+      profile: UserProfileSchema.parse({}), // Initialize with valid defaults from schema
     },
   });
 
@@ -83,7 +75,7 @@ export function ProfileForm() {
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
         email: authUser.email || '',
-        profile: UserProfileSchema.parse({}).default, // Default profile
+        profile: UserProfileSchema.parse({}), // Parse to get schema defaults
       });
     }
   }, [userData, authUser, form, isUserDataLoading, userDataError]);
@@ -189,7 +181,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Fitness Level</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}> {/* Ensure value prop is used */}
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select your fitness level" />
@@ -240,7 +232,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Training Days Per Week</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(Number(value))} defaultValue={String(field.value)}>
+                  <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}> {/* Ensure value prop is used */}
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select days" />
