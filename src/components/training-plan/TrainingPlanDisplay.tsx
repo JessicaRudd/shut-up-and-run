@@ -5,7 +5,7 @@ import type { TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from '@/components/ui/button';
-import { CalendarIcon as CalendarIconLucideTab, Info, ListChecks } from 'lucide-react';
+import { CalendarIcon as CalendarIconLucideTab, Info, ListChecks, Trophy } from 'lucide-react';
 import { CalendarIcon as CalendarIconHeader } from 'lucide-react';
 import { format, parseISO, isPast, isValid, isWithinInterval, compareAsc } from 'date-fns';
 import { useState, useEffect, useMemo, type ComponentProps } from 'react';
@@ -24,9 +24,8 @@ interface TrainingPlanDisplayProps {
 interface ParsedWorkout {
   date: Date;
   description: string;
-  isPrimary: boolean;
   weekHeader?: string;
-  isRestDay?: boolean; // Added to mark rest days
+  isRestDay?: boolean;
 }
 
 interface PlanListItem {
@@ -46,8 +45,9 @@ function parseCalendarWorkouts(rawPlanText: string): ParsedWorkout[] {
   const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/;
   let lastValidDate: Date | null = null;
   let currentWeekHeader: string | undefined = undefined;
-  let currentDayPrimaryWorkoutIsRest: boolean | undefined = undefined;
-
+  
+  // Map to store attributes (weekHeader, isRestDay) for the primary entry of a date
+  const dateAttributesMap = new Map<string, { weekHeader?: string; isRestDay?: boolean }>();
 
   for (const line of lines) {
     const weekMatch = line.match(weekRegexGlobal);
@@ -60,31 +60,38 @@ function parseCalendarWorkouts(rawPlanText: string): ParsedWorkout[] {
     if (match) {
       const dateStr = match[1];
       const description = match[2].trim();
-      currentDayPrimaryWorkoutIsRest = description.toLowerCase().includes('rest');
+      const currentDayIsRest = description.toLowerCase().includes('rest');
       try {
         const date = parseISO(dateStr);
         if (isValid(date)) {
           if (description) {
-            parsed.push({ date, description, isPrimary: true, weekHeader: currentWeekHeader, isRestDay: currentDayPrimaryWorkoutIsRest });
+            parsed.push({ date, description, weekHeader: currentWeekHeader, isRestDay: currentDayIsRest });
           }
           lastValidDate = date;
+          // Store attributes for this primary date entry
+          dateAttributesMap.set(format(date, 'yyyy-MM-dd'), { weekHeader: currentWeekHeader, isRestDay: currentDayIsRest });
         } else if (description && lastValidDate) {
-          parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false, weekHeader: currentWeekHeader, isRestDay: currentDayPrimaryWorkoutIsRest });
+           // Fallback for lines that seem like continuations but date parsing failed earlier for primary
+           const lastDateStr = format(lastValidDate, 'yyyy-MM-dd');
+           const attrs = dateAttributesMap.get(lastDateStr) || { weekHeader: currentWeekHeader, isRestDay: undefined };
+           parsed.push({ date: lastValidDate, description: line.trim(), weekHeader: attrs.weekHeader, isRestDay: attrs.isRestDay });
         }
       } catch (e) {
          if (lastValidDate && line.trim()) {
-            parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false, weekHeader: currentWeekHeader, isRestDay: currentDayPrimaryWorkoutIsRest });
+            const lastDateStr = format(lastValidDate, 'yyyy-MM-dd');
+            const attrs = dateAttributesMap.get(lastDateStr) || { weekHeader: currentWeekHeader, isRestDay: undefined };
+            parsed.push({ date: lastValidDate, description: line.trim(), weekHeader: attrs.weekHeader, isRestDay: attrs.isRestDay });
           }
       }
     } else if (lastValidDate && line.trim()) {
-      // This line is part of the previous date's workout. Inherit its weekHeader and isRestDay status.
-       const primaryWorkoutForDay = parsed.find(p => p.date.getTime() === lastValidDate?.getTime() && p.isPrimary);
+      // This line is part of the previous date's workout. Inherit its attributes.
+       const lastDateStr = format(lastValidDate, 'yyyy-MM-dd');
+       const attrs = dateAttributesMap.get(lastDateStr) || { weekHeader: currentWeekHeader, isRestDay: undefined }; // Fallback to current if somehow primary not found yet
        parsed.push({ 
          date: lastValidDate, 
          description: line.trim(), 
-         isPrimary: false, 
-         weekHeader: primaryWorkoutForDay?.weekHeader || currentWeekHeader, // Fallback to current if somehow primary not found yet
-         isRestDay: primaryWorkoutForDay?.isRestDay 
+         weekHeader: attrs.weekHeader,
+         isRestDay: attrs.isRestDay 
        });
     }
   }
@@ -130,7 +137,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
   }, [initialCalendarMonth]);
 
   useEffect(() => {
-    if (plan?.rawPlanText) { // Removed startDate and endDate checks here as parseCalendarWorkouts handles dates
+    if (plan?.rawPlanText) {
       setCalendarWorkouts(parseCalendarWorkouts(plan.rawPlanText));
       setScheduleListItems(getScheduleListItems(plan.rawPlanText));
     } else {
@@ -153,38 +160,45 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
 
   const planStartDateValid = plan && plan.startDate && isValid(parseISO(plan.startDate));
   const planEndDateValid = plan && plan.endDate && isValid(parseISO(plan.endDate));
+  const planEndDateForComparison = planEndDateValid ? parseISO(plan.endDate) : null;
 
 
   function CustomDay(props: DayProps): JSX.Element {
     const dayKey = format(props.date, 'yyyy-MM-dd');
-    const dayWorkouts = workoutsByDate.get(dayKey);
+    const dayWorkouts = workoutsByDate.get(dayKey) || [];
+    
+    const isRaceDay = !!(planEndDateForComparison && format(planEndDateForComparison, 'yyyy-MM-dd') === dayKey);
 
-    const hasAnyWorkout = dayWorkouts && dayWorkouts.length > 0;
+    const hasAnyWorkout = dayWorkouts.length > 0;
     const isActualRestDay = hasAnyWorkout && dayWorkouts.every(w => w.isRestDay);
-    const isActualWorkoutDay = hasAnyWorkout && dayWorkouts.some(w => !w.isRestDay);
+    const isActualWorkoutDay = hasAnyWorkout && !isActualRestDay;
 
     const dayButtonBaseClass = cn(
       buttonVariants({ variant: "ghost" }),
       "h-9 w-9 p-0 font-normal",
-      // Apply specific day type styles first if not selected
-      isActualWorkoutDay && !props.modifiers?.selected && "bg-primary/20 text-primary font-semibold hover:bg-primary/30",
-      isActualRestDay && !props.modifiers?.selected && "bg-accent/20 text-accent-foreground font-medium hover:bg-accent/30",
-      // Then apply standard modifiers. 'today' and 'selected' might override above if their selectors are more specific or applied later by DayPicker's default classes.
-      props.modifiers?.today && "bg-accent text-accent-foreground", // Bright yellow for today
-      props.modifiers?.selected && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground", // Bright orange for selected
+      // These conditions are ordered by precedence (most specific/important first)
+      props.modifiers?.selected && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+      !props.modifiers?.selected && props.modifiers?.today && "bg-accent text-accent-foreground",
+      !props.modifiers?.selected && !props.modifiers?.today && isRaceDay && "bg-emerald-200 text-emerald-800 font-semibold hover:bg-emerald-300",
+      !props.modifiers?.selected && !props.modifiers?.today && !isRaceDay && isActualWorkoutDay && "bg-primary/20 text-primary font-semibold hover:bg-primary/30",
+      !props.modifiers?.selected && !props.modifiers?.today && !isRaceDay && isActualRestDay && "bg-accent/20 text-accent-foreground font-medium hover:bg-accent/30",
+      // Fallbacks for disabled/outside, should apply if other active states don't
       props.modifiers?.disabled && "text-muted-foreground opacity-50",
-      props.modifiers?.outside && "text-muted-foreground opacity-50 day-outside"
+      props.modifiers?.outside && !props.modifiers?.disabled && "text-muted-foreground opacity-50 day-outside" 
     );
     const dayButtonContent = format(props.date, "d");
 
-    if (hasAnyWorkout && !props.modifiers?.disabled && !props.modifiers?.outside) {
-      const weekHeader = dayWorkouts[0]?.weekHeader; // Assuming first workout's week header is representative
+    const showTooltip = isRaceDay || hasAnyWorkout;
+    
+    const weekHeader = dayWorkouts[0]?.weekHeader;
+
+    if (showTooltip && !props.modifiers?.disabled && !props.modifiers?.outside) {
       return (
         <TooltipProvider delayDuration={100}>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                {...props.buttonProps} // Spread buttonProps here for accessibility and base DayPicker functionality
+                {...props.buttonProps}
                 className={dayButtonBaseClass}
               >
                 {dayButtonContent}
@@ -192,14 +206,26 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
             </TooltipTrigger>
             <TooltipContent className="w-80 max-h-96 overflow-y-auto text-left shadow-lg bg-card text-card-foreground p-4 rounded-md border">
               <div className="grid gap-2">
-                {weekHeader && <h4 className="font-semibold leading-none text-md text-primary">{weekHeader}</h4>}
-                <ul className="space-y-1 text-sm">
-                  {dayWorkouts.map((workout, index) => (
-                    <li key={index} className={`${workout.isPrimary ? 'font-medium' : 'pl-3 text-muted-foreground'}`}>
-                      {workout.description}
-                    </li>
-                  ))}
-                </ul>
+                {isRaceDay && (
+                  <div className="flex items-center gap-2">
+                    <Trophy className="h-5 w-5 text-emerald-600" />
+                    <h4 className="font-semibold leading-none text-md text-emerald-700">Race Day! Good Luck!</h4>
+                  </div>
+                )}
+                {weekHeader && (
+                  <h5 className={`font-medium leading-none text-sm ${isRaceDay && dayWorkouts.length > 0 ? 'text-muted-foreground pt-1' : 'text-primary'}`}>
+                    {weekHeader}
+                  </h5>
+                )}
+                {dayWorkouts.length > 0 && (
+                  <ul className={`space-y-1 text-xs ${isRaceDay || weekHeader ? 'pl-4' : ''}`}>
+                    {dayWorkouts.map((workout, index) => (
+                      <li key={index} className={`${workout.isRestDay ? 'text-accent-foreground' : 'text-muted-foreground'}`}>
+                        {workout.description}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -240,7 +266,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
         )}
       </CardHeader>
       <CardContent>
-        {planEnded && (
+        {planEnded && !isPast(new Date()) && ( // Only show if plan ended but today is not past end date (e.g. plan ended yesterday)
           <Alert variant="default" className="mb-6 bg-accent/30 border-accent">
             <Info className="h-4 w-4 text-accent-foreground" />
             <AlertTitle className="text-accent-foreground">Plan Completed!</AlertTitle>
@@ -309,10 +335,6 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                       fromDate={parseISO(plan.startDate)}
                       toDate={parseISO(plan.endDate)}
                       modifiers={{
-                        // The 'workoutDay' and 'restDay' modifiers are for potential direct styling via modifiersStyles if needed,
-                        // but CustomDay handles the logic directly.
-                        // actualWorkoutDay: calendarWorkouts.filter(w => !w.isRestDay).map(w => w.date),
-                        // actualRestDay: calendarWorkouts.filter(w => w.isRestDay).map(w => w.date),
                         disabled: (date) => !isWithinInterval(date, {start: parseISO(plan.startDate), end: parseISO(plan.endDate)})
                       }}
                       components={{
