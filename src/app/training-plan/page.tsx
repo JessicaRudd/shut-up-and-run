@@ -1,3 +1,4 @@
+
 'use client';
 
 import { AuthGuard } from '@/components/auth/AuthGuard';
@@ -8,14 +9,17 @@ import { useUser, useFirestore, useDoc } from '@/firebase';
 import type { User as AppUser, TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
 import { doc, DocumentReference } from 'firebase/firestore';
 import { useState, useEffect, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, User as UserIconLucide, Info } from 'lucide-react'; // Added UserIconLucide
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Info } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'; // Added Card components
+import { Button } from '@/components/ui/button'; // Added Button
+import { useRouter } from 'next/navigation'; // Added useRouter
 import { isPast, parseISO } from 'date-fns';
 
 export default function TrainingPlanPage() {
   const { user: authUser, isUserLoading: isAuthUserLoading } = useUser();
   const firestore = useFirestore();
+  const router = useRouter(); // Initialized useRouter
 
   // User data
   const userDocRef = useMemo(() => {
@@ -66,6 +70,7 @@ export default function TrainingPlanPage() {
     return (
        <AuthGuard>
         <AppLayout>
+          <div className="container mx-auto py-8">
             <Alert variant="destructive">
               <Info className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
@@ -73,6 +78,33 @@ export default function TrainingPlanPage() {
                 {userError?.message || trainingPlanError?.message || "Could not load training plan data."}
               </AlertDescription>
             </Alert>
+          </div>
+        </AppLayout>
+      </AuthGuard>
+    );
+  }
+
+  // If authenticated, but no user document data yet (e.g., new user redirected from signup/login)
+  if (authUser && !userData && !isUserDataLoading) {
+    return (
+      <AuthGuard>
+        <AppLayout>
+          <div className="container mx-auto py-8 flex items-center justify-center min-h-[calc(100vh-15rem)]">
+            <Card className="w-full max-w-lg text-center shadow-xl">
+              <CardHeader>
+                <UserIconLucide className="mx-auto h-12 w-12 text-primary" />
+                <CardTitle className="text-2xl mt-4">Complete Your Profile</CardTitle>
+                <CardDescription className="mt-2">
+                  Please complete your profile to set up and view your training plan.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button onClick={() => router.push('/profile')} className="w-full">
+                  Go to Profile
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </AppLayout>
       </AuthGuard>
     );
@@ -81,24 +113,34 @@ export default function TrainingPlanPage() {
   const planExistsAndIsActive = trainingPlanData && !isPast(parseISO(trainingPlanData.endDate));
   const planExistsButEnded = trainingPlanData && isPast(parseISO(trainingPlanData.endDate));
 
+  // Determine if setup form should be shown
+  // Show setup if:
+  // 1. Explicitly requested (showSetupForm is true)
+  // 2. OR User data is loaded, but there's no current plan data and we're not still loading the plan
+  //    (this covers cases like no trainingPlanId on user, or a planId that doesn't resolve to a document)
+  const shouldShowSetupForm = showSetupForm || (userData && !trainingPlanData && !isTrainingPlanLoading && currentPlanId === null);
+
 
   return (
     <AuthGuard>
       <AppLayout>
         <div className="container mx-auto py-8">
-          {showSetupForm || (!trainingPlanData && !isTrainingPlanLoading && userData) ? (
-            userData && <TrainingPlanSetup currentUserData={userData} onPlanGenerated={handlePlanGenerated} />
+          {shouldShowSetupForm && userData ? (
+            <TrainingPlanSetup currentUserData={userData} onPlanGenerated={handlePlanGenerated} />
           ) : trainingPlanData ? (
             <TrainingPlanDisplay plan={trainingPlanData} onSetupNewPlan={() => setShowSetupForm(true)} />
           ) : (
-            // This case: no plan ID on user, or plan ID exists but planData is null (still loading or error handled above)
-            // If userData is loaded, means no planId is set.
-            userData && !isTrainingPlanLoading && (
+            // Fallback for when userData is loaded, no plan data, and not explicitly showing setup.
+            // This could be initial state for a user with no planId.
+             userData && !isTrainingPlanLoading && (
                 <Alert>
                     <Info className="h-4 w-4" />
                     <AlertTitle>No Active Training Plan</AlertTitle>
                     <AlertDescription>
                         You don&apos;t have an active training plan. Generate one now to get started!
+                         <Button variant="link" className="p-0 h-auto ml-1 text-primary" onClick={() => setShowSetupForm(true)}>
+                            Create Plan
+                        </Button>
                     </AlertDescription>
                 </Alert>
             )
@@ -110,6 +152,9 @@ export default function TrainingPlanPage() {
                 <AlertTitle className="text-accent-foreground">Previous Plan Ended</AlertTitle>
                 <AlertDescription className="text-accent-foreground/80">
                   Your previous training plan has ended. You can generate a new one or check your dashboard for daily workout suggestions.
+                   <Button variant="link" className="p-0 h-auto ml-1 text-accent-foreground" onClick={() => setShowSetupForm(true)}>
+                     Generate New Plan
+                  </Button>
                 </AlertDescription>
             </Alert>
            )}
@@ -118,3 +163,4 @@ export default function TrainingPlanPage() {
     </AuthGuard>
   );
 }
+
