@@ -60,20 +60,23 @@ export function ProfileForm() {
 
   useEffect(() => {
     if (userData) {
-      const profileDataToParse = { ...(userData.profile || {}) }; // Create a mutable copy or use default if undefined/null
+      const profileDataToParse = { ...(userData.profile || {}) }; 
 
       // Check and correct 'goal' if it's an invalid enum value from old data
-      const goalEnumValues = UserProfileSchema.shape.goal.options; // Attempting direct access to options
+      const validGoalEnumValues = ["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"];
 
-      if (profileDataToParse.goal && !goalEnumValues.includes(profileDataToParse.goal as any)) {
+      if (profileDataToParse.goal && !validGoalEnumValues.includes(profileDataToParse.goal as any)) {
         // If goal exists and is not a valid enum member, reset it to the schema's default.
-        // UserProfileSchema.shape.goal.parse(undefined) will yield the default value ("5K").
-        profileDataToParse.goal = UserProfileSchema.shape.goal.parse(undefined);
+        try {
+          // UserProfileSchema.shape.goal.parse(undefined) should yield the default value ("5K").
+          profileDataToParse.goal = UserProfileSchema.shape.goal.parse(undefined);
+        } catch (parseError) {
+            console.warn("Failed to parse default goal using Zod schema, falling back to hardcoded default '5K'. Error:", parseError);
+            profileDataToParse.goal = "5K"; // Hardcoded default if .parse(undefined) fails
+        }
       }
 
       // Now parse the potentially corrected profile data.
-      // This ensures that if 'goal' was invalid, it's now fixed,
-      // and other missing fields in profileDataToParse get their schema defaults.
       const parsedProfile = UserProfileSchema.parse(profileDataToParse);
 
       form.reset({
