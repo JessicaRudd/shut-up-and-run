@@ -1,0 +1,343 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema",
+      "title": "User",
+      "description": "Represents a user of the RunMate application.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address for login and communication."
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Hashed password for authentication. Stored securely."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The user's first name."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The user's last name."
+        },
+        "profile": {
+          "type": "object",
+          "description": "Embedded document containing user profile information.",
+          "properties": {
+            "trainingPreferences": {
+              "type": "object",
+              "description": "User's training preferences (e.g., preferred workout types, intensity levels).",
+              "properties": {
+                "workoutTypes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Preferred types of workouts."
+                },
+                "intensityLevel": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ],
+                  "description": "Desired workout intensity level."
+                }
+              },
+              "required": []
+            },
+            "trainingPlanDetails": {
+              "type": "object",
+              "description": "Details about the user's current training plan (e.g., start date, end date, goals).",
+              "properties": {
+                "startDate": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "Start date of the training plan."
+                },
+                "endDate": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "End date of the training plan."
+                },
+                "goals": {
+                  "type": "string",
+                  "description": "Overall training goals."
+                }
+              },
+              "required": []
+            },
+            "newsSettings": {
+              "type": "object",
+              "description": "User's preferred news sources and categories.",
+              "properties": {
+                "sources": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of preferred news sources."
+                }
+              },
+              "required": []
+            }
+          },
+          "required": []
+        },
+        "trainingPlanId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Reference to the unique identifier of the related TrainingPlan entity. (Relationship: User 1:1 TrainingPlan, optional)"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "passwordHash",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "TrainingPlan": {
+      "$schema": "http://json-schema.org/draft-07/schema",
+      "title": "TrainingPlan",
+      "description": "Represents a user's generated training plan.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the TrainingPlan entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the related User entity. (Relationship: User 1:1 TrainingPlan)"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The start date of the training plan."
+        },
+        "endDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The end date of the training plan."
+        },
+        "workouts": {
+          "type": "array",
+          "description": "Array of workout details.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "type": "string",
+                "format": "date",
+                "description": "Date of the workout."
+              },
+              "description": {
+                "type": "string",
+                "description": "Description/instructions for the workout."
+              },
+              "type": {
+                "type": "string",
+                "description": "The workout type (e.g., 'Running', 'Strength Training')."
+              }
+            },
+            "required": [
+              "date",
+              "description",
+              "type"
+            ]
+          }
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "startDate",
+        "endDate",
+        "workouts"
+      ]
+    },
+    "WeatherCache": {
+      "$schema": "http://json-schema.org/draft-07/schema",
+      "title": "WeatherCache",
+      "description": "Represents cached weather data for a specific location and time.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the WeatherCache entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "location": {
+          "type": "string",
+          "description": "The location for which the weather data is cached (e.g., city, coordinates)."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The time the weather data was cached."
+        },
+        "weatherData": {
+          "type": "object",
+          "description": "The cached weather data (e.g., temperature, conditions).",
+          "properties": {
+            "temperature": {
+              "type": "number",
+              "description": "The temperature in Celsius or Fahrenheit."
+            },
+            "conditions": {
+              "type": "string",
+              "description": "A description of the weather conditions (e.g., 'Sunny', 'Rainy')."
+            }
+          },
+          "required": []
+        }
+      },
+      "required": [
+        "id",
+        "location",
+        "timestamp",
+        "weatherData"
+      ]
+    },
+    "DashboardCache": {
+      "$schema": "http://json-schema.org/draft-07/schema",
+      "title": "DashboardCache",
+      "description": "Represents cached dashboard content for a user for a specific day.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the DashboardCache entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the related User entity. (Relationship: User 1:N DashboardCache)"
+        },
+        "cacheDate": {
+          "type": "string",
+          "format": "date",
+          "description": "The date the dashboard was generated for."
+        },
+        "dashboardContent": {
+          "type": "string",
+          "description": "Cached HTML or JSON representing the dashboard content."
+        },
+        "generatedWorkout": {
+          "type": "string",
+          "description": "Generated workout suggested by AI based on the user's preferences."
+        },
+        "motivationalGreeting": {
+          "type": "string",
+          "description": "Generated motivational message for the user."
+        },
+        "dressRecommendation": {
+          "type": "string",
+          "description": "Generated clothing recommendation for the current weather conditions."
+        },
+        "runningNews": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of cached running news headlines."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "cacheDate",
+        "dashboardContent",
+        "generatedWorkout",
+        "motivationalGreeting",
+        "dressRecommendation",
+        "runningNews"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "definition": {
+          "description": "Collection containing individual user profile documents.",
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the user.",
+              "name": "userId"
+            }
+          ]
+        },
+        "path": "/users/{userId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing training plans for users.",
+          "entityName": "TrainingPlan",
+          "schema": {
+            "$ref": "#/backend/entities/TrainingPlan"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the training plan.",
+              "name": "trainingPlanId"
+            }
+          ]
+        },
+        "path": "/trainingPlans/{trainingPlanId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing cached weather data.",
+          "entityName": "WeatherCache",
+          "schema": {
+            "$ref": "#/backend/entities/WeatherCache"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the weather cache entry.",
+              "name": "weatherCacheId"
+            }
+          ]
+        },
+        "path": "/weatherCache/{weatherCacheId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing cached dashboard content for users.",
+          "entityName": "DashboardCache",
+          "schema": {
+            "$ref": "#/backend/entities/DashboardCache"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the dashboard cache entry.",
+              "name": "dashboardCacheId"
+            }
+          ]
+        },
+        "path": "/dashboardCache/{dashboardCacheId}"
+      }
+    ],
+    "reasoning": "Based on the provided entities and app proposal, the following Firestore collections are recommended:\n\n*   `/users/{userId}`: Stores user profile data. The document ID is the user's unique ID (`userId`). This collection is critical for user authentication, profile management, and personalized experiences.\n*   `/trainingPlans/{trainingPlanId}`: Stores training plans generated for users. Includes workout details, start/end dates, and the associated `userId`. Allows users to view training schedules in calendar and list views.\n*   `/weatherCache/{weatherCacheId}`: Stores cached weather data for specific locations and timestamps. Used to provide weather forecasts within the personalized dashboard.\n*   `/dashboardCache/{dashboardCacheId}`: Stores cached dashboard content for users for specific dates. Used to optimize the user experience by caching dashboard content like motivational greetings, generated workouts, clothing advice, and running news."
+  }
+}

@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read access.  This might be adjusted based on which data should really be public.
+    match /{document=**} {
+      allow read: if true;
+    }
+
+    // Rules for the 'users' collection
+    match /users/{userId} {
+      // Allow read/write access to authenticated users if they own the document
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Validation: Email must be a valid email format
+      allow create: if request.auth != null && request.resource.data.email is String && request.resource.data.email.matches('^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    }
+
+    // Rules for the 'trainingPlans' collection
+    match /trainingPlans/{trainingPlanId} {
+      // Allow read/write access to authenticated users if they own the training plan (userId matches)
+      allow read, write: if request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Rules for the 'weatherCache' collection
+    match /weatherCache/{weatherCacheId} {
+      // Allow read access to all authenticated users. Write is restricted.
+      allow read: if request.auth != null;
+	    allow write: if false; //Prevent writes for all users (only backend processes should write to this).
+
+    }
+
+    // Rules for the 'dashboardCache' collection
+    match /dashboardCache/{dashboardCacheId} {
+      // Allow read/write access to authenticated users if they own the dashboard cache (userId matches).
+      allow read, write: if request.auth != null && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && request.resource.data.userId == request.auth.uid;
+	  }
+  }
+}

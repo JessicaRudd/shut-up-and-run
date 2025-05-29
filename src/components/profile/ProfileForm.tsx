@@ -1,0 +1,313 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useUser, useFirestore, useDoc, updateDocumentNonBlocking } from '@/firebase';
+import type { User as FirebaseUser } from 'firebase/auth';
+import { doc, DocumentReference } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import { UserSchema, UserProfileSchema, type User as AppUser } from '@/lib/firebase-schemas';
+import { useEffect, useState, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+// Combine User fields (firstName, lastName, email) and UserProfile fields for the form
+const ProfileFormSchema = z.object({
+  firstName: z.string().min(1, "First name is required."),
+  lastName: z.string().min(1, "Last name is required."),
+  email: z.string().email(), // Display only, not editable via this form for simplicity
+  profile: UserProfileSchema,
+});
+
+type ProfileFormValues = z.infer<typeof ProfileFormSchema>;
+
+export function ProfileForm() {
+  const { user: authUser, isUserLoading: isAuthUserLoading } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const userDocRef = useMemo(() => {
+    if (!firestore || !authUser?.uid) return null;
+    return doc(firestore, 'users', authUser.uid) as DocumentReference<AppUser>;
+  }, [firestore, authUser]);
+
+  const { data: userData, isLoading: isUserDataLoading, error: userDataError } = useDoc<AppUser>(userDocRef);
+
+  const form = useForm<ProfileFormValues>({
+    resolver: zodResolver(ProfileFormSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      profile: {
+        fitnessLevel: 'Beginner',
+        runningExperience: '',
+        goal: '',
+        daysPerWeek: 3,
+        preferredWorkoutTypes: '',
+        availableTime: '',
+        equipmentAvailable: '',
+        newsSources: [],
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (userData) {
+      form.reset({
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        email: userData.email,
+        profile: userData.profile,
+      });
+    } else if (authUser && !isUserDataLoading && !userDataError) {
+      // If userData is not found but authUser exists, populate with authUser info
+      // This can happen if the user document wasn't created on signup for some reason
+      // or for anonymous users if we decide to let them have a profile.
+      form.reset({
+        firstName: authUser.displayName?.split(' ')[0] || '',
+        lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
+        email: authUser.email || '',
+        profile: UserProfileSchema.parse({}).default, // Default profile
+      });
+    }
+  }, [userData, authUser, form, isUserDataLoading, userDataError]);
+
+  const onSubmit = async (data: ProfileFormValues) => {
+    if (!userDocRef) {
+      toast({ variant: 'destructive', title: 'Error', description: 'User not found.' });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      // We only update fields that are part of AppUser, excluding email from direct update here
+      const updateData: Partial<AppUser> = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        profile: data.profile,
+      };
+      updateDocumentNonBlocking(userDocRef, updateData);
+      toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
+    } catch (error) {
+      console.error('Profile update failed:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: 'Could not update profile. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  if (isAuthUserLoading || (authUser && isUserDataLoading)) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (userDataError) {
+     return <p className="text-destructive">Error loading profile data: {userDataError.message}</p>;
+  }
+
+
+  return (
+    <Card className="w-full max-w-2xl mx-auto shadow-lg">
+      <CardHeader>
+        <CardTitle>Your Profile</CardTitle>
+        <CardDescription>Manage your personal information and training preferences.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Your first name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Your last name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Your email" {...field} disabled />
+                  </FormControl>
+                  <FormDescription>Email cannot be changed here.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <h3 className="text-lg font-medium pt-4 border-t">Training Preferences</h3>
+
+            <FormField
+              control={form.control}
+              name="profile.fitnessLevel"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fitness Level</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your fitness level" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Beginner">Beginner</SelectItem>
+                      <SelectItem value="Intermediate">Intermediate</SelectItem>
+                      <SelectItem value="Advanced">Advanced</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="profile.runningExperience"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Running Experience</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Describe your running experience (e.g., new to running, run a few times a week, marathon runner)" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="profile.goal"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Primary Goal</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Complete a 5k, Run a half marathon, Improve pace" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="profile.daysPerWeek"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Training Days Per Week</FormLabel>
+                  <Select onValueChange={(value) => field.onChange(Number(value))} defaultValue={String(field.value)}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select days" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 5, 6, 7].map(day => (
+                        <SelectItem key={day} value={String(day)}>{day} day{day > 1 ? 's' : ''}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <h3 className="text-lg font-medium pt-4 border-t">Workout Suggestions Preferences</h3>
+            <FormDescription>These settings help us suggest workouts if you don&apos;t have an active plan.</FormDescription>
+             <FormField
+              control={form.control}
+              name="profile.preferredWorkoutTypes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Preferred Workout Types</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Running, HIIT, Yoga" {...field} />
+                  </FormControl>
+                  <FormDescription>Comma-separated list of your preferred workout types.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="profile.availableTime"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Typical Available Time for Workout</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., 30 minutes, 1 hour" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="profile.equipmentAvailable"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Equipment Available</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Dumbbells, Treadmill, None" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
+            <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  );
+}
