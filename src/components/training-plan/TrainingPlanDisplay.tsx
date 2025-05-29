@@ -36,16 +36,19 @@ interface PlanListItem {
 function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, planEndDateStr: string): ParsedWorkout[] {
   const parsed: ParsedWorkout[] = [];
   const lines = rawPlanText.split('\n').filter(line => line.trim() !== '');
-  
+
+  // These dates are mainly for context or potential future validation,
+  // but the core parsing will rely on the dates found in the text.
   const planStartDate = parseISO(planStartDateStr);
   const planEndDate = parseISO(planEndDateStr);
 
   if (!isValid(planStartDate) || !isValid(planEndDate)) {
-    console.error("Invalid plan start or end date for parsing calendar workouts.");
-    return [];
+    // This is a problem with the plan's metadata, not necessarily the raw text.
+    console.error("Invalid plan start or end date metadata provided for calendar context.");
+    // We might still attempt to parse the rawPlanText if it contains valid dates.
   }
 
-  const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/; 
+  const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/;
   let lastValidDate: Date | null = null;
 
   for (const line of lines) {
@@ -55,31 +58,33 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
       const description = match[2].trim();
       try {
         const date = parseISO(dateStr);
-        // Ensure date is valid and within the plan's start/end range
-        if (isValid(date) && isWithinInterval(date, { start: planStartDate, end: planEndDate })) {
-          parsed.push({ date, description, isPrimary: true });
+        if (isValid(date)) {
+          // If the line matches the date prefix and the date is valid,
+          // we consider it a primary entry for that date.
+          // Add it if there's a description.
+          if (description) {
+            parsed.push({ date, description, isPrimary: true });
+          }
+          // Update lastValidDate regardless of description, so continuation lines can attach.
           lastValidDate = date;
-        } else if (description && lastValidDate) { 
-          // If date is invalid/out of range but there's content, append to last valid date
-          // This handles cases where AI might output a YYYY-MM-DD line that's outside the plan range
-          // but is intended as part of content. Or if a date is malformed.
-           parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
-        } else if (description) {
-          // If date invalid, no lastValidDate, but has description - might be a general note.
-          // For calendar view, we only care about dated entries. So we might ignore this.
-          // Or, if the AI strictly adheres to the prompt, this case is less likely for workouts.
+        } else if (description && lastValidDate) {
+          // Regex matched a date-like pattern, but parseISO failed (e.g., "2024-99-99: text")
+          // Treat as continuation of the previous valid date.
+          parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
         }
+        // If regex matched, date was invalid, AND no description, this line is skipped.
       } catch (e) {
-         if(lastValidDate && line.trim()) {
-            // If date parsing fails, treat as continuation of previous day if line has content
+         // Catch errors specifically from parseISO (e.g., completely malformed string)
+         if (lastValidDate && line.trim()) { // If there's text and a previous date context
             parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
           }
       }
     } else if (lastValidDate && line.trim() && !line.toLowerCase().startsWith('week ')) {
+      // This is a continuation line (doesn't start with YYYY-MM-DD)
       parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
     }
   }
-  return parsed.sort((a,b) => compareAsc(a.date, b.date));
+  return parsed.sort((a, b) => compareAsc(a.date, b.date));
 }
 
 
@@ -110,9 +115,12 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
 
 
   useEffect(() => {
-    if (plan?.rawPlanText) {
+    if (plan?.rawPlanText && plan.startDate && plan.endDate) {
       setCalendarWorkouts(parseCalendarWorkouts(plan.rawPlanText, plan.startDate, plan.endDate));
       setScheduleListItems(getScheduleListItems(plan.rawPlanText));
+    } else {
+      setCalendarWorkouts([]);
+      setScheduleListItems([]);
     }
   }, [plan]);
 
@@ -142,7 +150,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
   };
   
   const initialCalendarMonth = useMemo(() => {
-    return plan ? parseISO(plan.startDate) : new Date();
+    return plan && isValid(parseISO(plan.startDate)) ? parseISO(plan.startDate) : new Date();
   }, [plan]);
 
 
@@ -153,7 +161,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
           <div>
             <CardTitle className="text-2xl">Your Training Plan</CardTitle>
             <CardDescription>
-              From {format(parseISO(plan.startDate), 'MMMM d, yyyy')} to {format(parseISO(plan.endDate), 'MMMM d, yyyy')}
+              From {plan.startDate ? format(parseISO(plan.startDate), 'MMMM d, yyyy') : 'N/A'} to {plan.endDate ? format(parseISO(plan.endDate), 'MMMM d, yyyy') : 'N/A'}
             </CardDescription>
           </div>
           <CalendarIconHeader className="h-8 w-8 text-primary" />
@@ -224,7 +232,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                 <CardDescription>Visualize your workouts. Click on a day for details.</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center">
-                {calendarWorkouts.length > 0 ? (
+                {calendarWorkouts.length > 0 && isValid(parseISO(plan.startDate)) && isValid(parseISO(plan.endDate)) ? (
                   <Popover open={!!selectedCalendarDate} onOpenChange={(isOpen) => !isOpen && setSelectedCalendarDate(undefined)}>
                     <PopoverTrigger asChild>
                       <div> 
@@ -241,7 +249,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                             disabled: (date) => !isWithinInterval(date, {start: parseISO(plan.startDate), end: parseISO(plan.endDate)})
                           }}
                           modifiersClassNames={{
-                            workoutDay: 'bg-primary/30 rounded-full !text-primary-foreground font-semibold',
+                            workoutDay: 'bg-primary/30 rounded-md !text-primary-foreground font-semibold',
                           }}
                           className="rounded-md border shadow-sm"
                         />
