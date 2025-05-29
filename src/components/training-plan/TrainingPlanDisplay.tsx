@@ -5,11 +5,12 @@ import type { TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from '@/components/ui/button';
-import { CalendarIcon as CalendarIconLucide, Info, ListChecks, BookText } from 'lucide-react'; // Renamed to avoid conflict
+import { CalendarIcon as CalendarIconLucideTab, Info, ListChecks } from 'lucide-react'; 
+import { CalendarIcon as CalendarIconHeader } from 'lucide-react';
 import { format, parseISO, isPast, isValid, isWithinInterval, compareAsc } from 'date-fns';
 import { useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar as ShadcnCalendar } from "@/components/ui/calendar"; // Renamed to avoid conflict
+import { Calendar as ShadcnCalendar } from "@/components/ui/calendar"; 
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -21,12 +22,13 @@ interface TrainingPlanDisplayProps {
 interface ParsedWorkout {
   date: Date;
   description: string;
-  isPrimary: boolean; // True if the line started with a date, false for subsequent lines for that date
+  isPrimary: boolean; 
 }
 
 interface PlanListItem {
   id: string;
   text: string;
+  isWeekHeader: boolean;
   isDateLine: boolean;
 }
 
@@ -43,7 +45,7 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
     return [];
   }
 
-  const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/; // Matches "YYYY-MM-DD: description" or "YYYY-MM-DD - description" etc.
+  const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/; 
   let lastValidDate: Date | null = null;
 
   for (const line of lines) {
@@ -53,22 +55,27 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
       const description = match[2].trim();
       try {
         const date = parseISO(dateStr);
+        // Ensure date is valid and within the plan's start/end range
         if (isValid(date) && isWithinInterval(date, { start: planStartDate, end: planEndDate })) {
           parsed.push({ date, description, isPrimary: true });
           lastValidDate = date;
-        } else {
-          // Date is out of range or invalid, treat as continuation of previous day if applicable
-          if(lastValidDate && description) {
-            parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
-          }
+        } else if (description && lastValidDate) { 
+          // If date is invalid/out of range but there's content, append to last valid date
+          // This handles cases where AI might output a YYYY-MM-DD line that's outside the plan range
+          // but is intended as part of content. Or if a date is malformed.
+           parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
+        } else if (description) {
+          // If date invalid, no lastValidDate, but has description - might be a general note.
+          // For calendar view, we only care about dated entries. So we might ignore this.
+          // Or, if the AI strictly adheres to the prompt, this case is less likely for workouts.
         }
       } catch (e) {
          if(lastValidDate && line.trim()) {
+            // If date parsing fails, treat as continuation of previous day if line has content
             parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
           }
       }
     } else if (lastValidDate && line.trim() && !line.toLowerCase().startsWith('week ')) {
-      // If no date prefix, but we have a last valid date, and it's not a "Week X" header
       parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
     }
   }
@@ -76,16 +83,19 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
 }
 
 
-// Simpler parser for list view, just splits lines and identifies date lines
 function getScheduleListItems(rawPlanText: string): PlanListItem[] {
   const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})/;
+  const dayNameRegex = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i;
+  const weekHeaderRegex = /^week\s+\d+/i;
+
   return rawPlanText.split('\n')
       .map(line => line.trim())
       .filter(line => line !== "")
       .map((line, index) => ({ 
         id: `item-${index}`, 
         text: line,
-        isDateLine: datePrefixRegex.test(line) || /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i.test(line)
+        isWeekHeader: weekHeaderRegex.test(line),
+        isDateLine: datePrefixRegex.test(line) || dayNameRegex.test(line)
       }));
 }
 
@@ -127,7 +137,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
     if (workoutsByDate.has(dayKey)) {
       setSelectedCalendarDate(day);
     } else {
-      setSelectedCalendarDate(undefined); // Close popover if day has no workout
+      setSelectedCalendarDate(undefined); 
     }
   };
   
@@ -146,7 +156,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
               From {format(parseISO(plan.startDate), 'MMMM d, yyyy')} to {format(parseISO(plan.endDate), 'MMMM d, yyyy')}
             </CardDescription>
           </div>
-          <CalendarIconLucide className="h-8 w-8 text-primary" />
+          <CalendarIconHeader className="h-8 w-8 text-primary" />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-sm mt-2 pt-2 border-t">
             <p><span className="font-medium">Goal:</span> {plan.goal}</p>
@@ -167,15 +177,12 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
         )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
             <TabsTrigger value="schedule" className="gap-1">
               <ListChecks className="h-4 w-4"/> Schedule
             </TabsTrigger>
             <TabsTrigger value="calendar" className="gap-1">
-              <CalendarIconLucide className="h-4 w-4"/> Calendar
-            </TabsTrigger>
-            <TabsTrigger value="raw" className="gap-1">
-              <BookText className="h-4 w-4" /> Raw Plan
+              <CalendarIconLucideTab className="h-4 w-4"/> Calendar
             </TabsTrigger>
           </TabsList>
 
@@ -188,14 +195,15 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
               <CardContent>
                 {scheduleListItems.length > 0 ? (
                   <ScrollArea className="h-[400px] pr-4">
-                    <ul className="space-y-1 text-sm">
+                    <ul className="space-y-1">
                       {scheduleListItems.map((item) => (
                         <li 
                           key={item.id} 
-                          className={`py-1 ${
-                            item.isDateLine ? 'font-semibold text-primary mt-2 border-b border-dashed' : 
-                            item.text.toLowerCase().startsWith('week ') ? 'font-bold text-lg mt-3 pt-1 border-b-2 border-primary/50' : 'pl-2'
-                          }`}
+                          className={`
+                            ${item.isWeekHeader ? 'font-bold text-lg text-primary mt-4 pt-2 border-t-2 border-primary/70 mb-2' : ''}
+                            ${item.isDateLine && !item.isWeekHeader ? 'font-semibold text-md text-primary-focus mt-3 border-b border-border pb-1' : ''}
+                            ${!item.isWeekHeader && !item.isDateLine ? 'pl-4 text-sm text-muted-foreground' : ''}
+                          `}
                         >
                           {item.text}
                         </li>
@@ -219,11 +227,11 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                 {calendarWorkouts.length > 0 ? (
                   <Popover open={!!selectedCalendarDate} onOpenChange={(isOpen) => !isOpen && setSelectedCalendarDate(undefined)}>
                     <PopoverTrigger asChild>
-                      <div> {/* Wrap Calendar to make it a valid PopoverTrigger child if needed */}
+                      <div> 
                         <ShadcnCalendar
                           mode="single"
                           selected={selectedCalendarDate}
-                          onSelect={setSelectedCalendarDate} // Popover trigger will be the calendar itself basically
+                          onSelect={setSelectedCalendarDate} 
                           onDayClick={handleDayClick}
                           month={initialCalendarMonth} 
                           fromDate={parseISO(plan.startDate)}
@@ -233,9 +241,9 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                             disabled: (date) => !isWithinInterval(date, {start: parseISO(plan.startDate), end: parseISO(plan.endDate)})
                           }}
                           modifiersClassNames={{
-                            workoutDay: 'bg-primary/20 rounded-full text-primary-foreground font-bold',
+                            workoutDay: 'bg-primary/30 rounded-full !text-primary-foreground font-semibold',
                           }}
-                          className="rounded-md border"
+                          className="rounded-md border shadow-sm"
                         />
                       </div>
                     </PopoverTrigger>
@@ -262,23 +270,9 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                 ) : (
                   <p className="text-muted-foreground p-4 text-center">
                     No workouts with recognizable dates (YYYY-MM-DD) found in the plan to display on the calendar.
-                    Check the 'Schedule' or 'Raw Plan' tab.
+                    Ensure the generated plan follows this format for each day.
                   </p>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="raw">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">Raw Training Plan Text</CardTitle>
-                <CardDescription>The original plan generated by the AI.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-[400px] whitespace-pre-line bg-muted/30 p-4 rounded-md border">
-                  {plan.rawPlanText}
-                </ScrollArea>
               </CardContent>
             </Card>
           </TabsContent>

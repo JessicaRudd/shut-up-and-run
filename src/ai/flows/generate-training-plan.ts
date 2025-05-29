@@ -48,7 +48,7 @@ export type GenerateTrainingPlanInput = z.infer<typeof GenerateTrainingPlanInput
 const GenerateTrainingPlanOutputSchema = z.object({
   trainingPlan: z
     .string()
-    .describe('A detailed training plan, including specific workouts for each day.'),
+    .describe('A detailed training plan, including specific workouts for each day. Each day\'s entry MUST start with "YYYY-MM-DD: " format.'),
 });
 export type GenerateTrainingPlanOutput = z.infer<typeof GenerateTrainingPlanOutputSchema>;
 
@@ -76,13 +76,17 @@ const prompt = ai.definePrompt({
   {{/if}}
   Additional Notes: {{{additionalNotes}}}
 
-  The training plan should include specific workouts for each day, including:
+  The training plan should include specific workouts for each day, formatted clearly.
+  IMPORTANT: Each day's entry MUST start with the date in YYYY-MM-DD format, followed by a colon and a space (e.g., "2024-08-01: Easy Run - 30 minutes").
+  Subsequent lines for the same day (e.g., details, notes) should not have a date prefix but should be clearly associated with that day's entry.
+  Include:
   - Type of workout (e.g., easy run, tempo run, interval training, long run, rest)
   - Distance or duration of the workout
   - Pace or intensity of the workout
   - Any additional instructions or notes
 
-  The training plan should be formatted for readability.
+  The training plan should be formatted for readability (e.g. using markdown-like list for workout details under each date).
+  Organize the plan by weeks (e.g., "Week 1", "Week 2", etc.) as main headers if appropriate for the plan length.
   Ensure the plan is tailored to the user's running level, experience, goal, and the number of days per week they can train.
   {{#if targetRaceDate}}
   Structure the plan to build towards the Target Race Date. The plan must end on or just before the Target Race Date.
