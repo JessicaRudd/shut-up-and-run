@@ -57,7 +57,7 @@ export function Header() {
           </Button>
         )}
         <Link href="/dashboard" className="text-xl font-semibold text-primary">
-          RunMate
+          Shut Up and Run
         </Link>
       </div>
       

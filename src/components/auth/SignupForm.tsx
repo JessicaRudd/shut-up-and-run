@@ -71,7 +71,7 @@ export function SignupForm() {
         setDocumentNonBlocking(userDocRef, newUser, { merge: true });
       }
       
-      toast({ title: 'Signup Successful', description: "Welcome to RunMate!" });
+      toast({ title: 'Signup Successful', description: "Welcome to Shut Up and Run!" });
       router.push('/dashboard');
     } catch (error) {
       const authError = error as AuthError;
@@ -89,7 +89,7 @@ export function SignupForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">Create your RunMate Account</CardTitle>
+        <CardTitle className="text-2xl">Create your Shut Up and Run Account</CardTitle>
         <CardDescription>Join us to start your personalized running journey.</CardDescription>
       </CardHeader>
       <CardContent>

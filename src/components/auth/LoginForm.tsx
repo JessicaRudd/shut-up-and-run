@@ -67,7 +67,7 @@ export function LoginForm() {
     setIsAnonymousLoading(true);
     try {
       await signInAnonymously(auth);
-      toast({ title: 'Signed in Anonymously', description: "Welcome to RunMate!" });
+      toast({ title: 'Signed in Anonymously', description: "Welcome to Shut Up and Run!" });
       router.push('/dashboard');
     } catch (error) {
       const authError = error as AuthError;
@@ -85,7 +85,7 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader>
-        <CardTitle className="text-2xl">Login to RunMate</CardTitle>
+        <CardTitle className="text-2xl">Login to Shut Up and Run</CardTitle>
         <CardDescription>Enter your credentials or sign in anonymously.</CardDescription>
       </CardHeader>
       <CardContent>

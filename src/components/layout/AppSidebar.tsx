@@ -8,7 +8,7 @@ import {
   CalendarCheck,
   MessageSquareText,
   LogOut,
-  Dumbbell,
+  Footprints, // Changed from Dumbbell
   PersonStanding,
 } from 'lucide-react';
 import {
@@ -50,8 +50,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" side="left" variant="sidebar">
       <SidebarHeader className="justify-between">
         <Link href="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/90">
-          <Dumbbell className="h-7 w-7" />
-          <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">RunMate</span>
+          <Footprints className="h-7 w-7" /> {/* Changed Icon */}
+          <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">Shut Up and Run</span> {/* Changed Name */}
         </Link>
         <SidebarTrigger className="hidden md:flex data-[collapsible=icon]:hidden" />
       </SidebarHeader>

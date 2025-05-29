@@ -60,7 +60,7 @@ export function FeedbackForm({ userName, userEmail }: FeedbackFormProps) {
 
     toast({
       title: 'Feedback Submitted!',
-      description: "Thanks for helping us improve RunMate.",
+      description: "Thanks for helping us improve Shut Up and Run.",
     });
     form.reset(); // Reset form after submission
     setIsSubmitting(false);

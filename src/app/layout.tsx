@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'RunMate',
-  description: 'Your Personalized Running Companion',
+  title: 'Shut Up and Run',
+  description: 'Your No-Nonsense Running Companion',
 };
 
 export default function RootLayout({
