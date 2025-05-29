@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Sun, CloudRain, Shirt } from 'lucide-react'; // Example icons
 import { Skeleton } from '@/components/ui/skeleton';
@@ -82,5 +83,3 @@ export function WeatherForecast({ cachedWeather, onWeatherGenerated }: WeatherFo
     </Card>
   );
 }
-// Need to add useState and useEffect imports
-import { useState, useEffect } from 'react';
