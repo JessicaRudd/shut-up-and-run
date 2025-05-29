@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { useState }_ from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 const feedbackFormSchema = z.object({
