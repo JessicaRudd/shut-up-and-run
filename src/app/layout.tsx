@@ -43,7 +43,7 @@ export default function RootLayout({
           data-position="Right"
           data-x_margin="18"
           data-y_margin="18"
-          strategy="lazyOnload"
+          strategy="afterInteractive"
         />
       </body>
     </html>
