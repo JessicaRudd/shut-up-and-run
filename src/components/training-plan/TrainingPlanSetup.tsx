@@ -32,8 +32,8 @@ import { cn } from '@/lib/utils';
 
 const TrainingPlanSetupSchema = z.object({
   fitnessLevel: UserProfileSchema.shape.fitnessLevel,
-  runningExperience: UserProfileSchema.shape.runningExperience.min(1, "Running experience is required for plan generation."),
-  goal: UserProfileSchema.shape.goal.min(1, "A goal is required for plan generation."),
+  runningExperience: UserProfileSchema.shape.runningExperience,
+  goal: UserProfileSchema.shape.goal,
   daysPerWeek: UserProfileSchema.shape.daysPerWeek,
   startDate: z.date({ required_error: "Start date is required." }),
   durationWeeks: z.number().min(1, "Duration must be at least 1 week.").max(52, "Duration cannot exceed 52 weeks."),
