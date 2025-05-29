@@ -5,12 +5,12 @@ import type { TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from '@/components/ui/button';
-import { CalendarIcon as CalendarIconLucideTab, Info, ListChecks } from 'lucide-react'; 
+import { CalendarIcon as CalendarIconLucideTab, Info, ListChecks } from 'lucide-react';
 import { CalendarIcon as CalendarIconHeader } from 'lucide-react';
 import { format, parseISO, isPast, isValid, isWithinInterval, compareAsc } from 'date-fns';
 import { useState, useEffect, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar as ShadcnCalendar } from "@/components/ui/calendar"; 
+import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -22,7 +22,7 @@ interface TrainingPlanDisplayProps {
 interface ParsedWorkout {
   date: Date;
   description: string;
-  isPrimary: boolean; 
+  isPrimary: boolean;
 }
 
 interface PlanListItem {
@@ -35,17 +35,15 @@ interface PlanListItem {
 // Parser for workouts with YYYY-MM-DD prefix for calendar view
 function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, planEndDateStr: string): ParsedWorkout[] {
   const parsed: ParsedWorkout[] = [];
+  if (!rawPlanText) return parsed;
+
   const lines = rawPlanText.split('\n').filter(line => line.trim() !== '');
 
-  // These dates are mainly for context or potential future validation,
-  // but the core parsing will rely on the dates found in the text.
-  const planStartDate = parseISO(planStartDateStr);
-  const planEndDate = parseISO(planEndDateStr);
+  const planStartDateValid = isValid(parseISO(planStartDateStr));
+  const planEndDateValid = isValid(parseISO(planEndDateStr));
 
-  if (!isValid(planStartDate) || !isValid(planEndDate)) {
-    // This is a problem with the plan's metadata, not necessarily the raw text.
-    console.error("Invalid plan start or end date metadata provided for calendar context.");
-    // We might still attempt to parse the rawPlanText if it contains valid dates.
+  if (!planStartDateValid || !planEndDateValid) {
+    console.warn("Invalid plan start or end date metadata provided for calendar parsing. Calendar may not be accurate.");
   }
 
   const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})\s*[:\-–—]?\s*(.*)/;
@@ -59,28 +57,20 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
       try {
         const date = parseISO(dateStr);
         if (isValid(date)) {
-          // If the line matches the date prefix and the date is valid,
-          // we consider it a primary entry for that date.
-          // Add it if there's a description.
           if (description) {
             parsed.push({ date, description, isPrimary: true });
           }
-          // Update lastValidDate regardless of description, so continuation lines can attach.
           lastValidDate = date;
         } else if (description && lastValidDate) {
-          // Regex matched a date-like pattern, but parseISO failed (e.g., "2024-99-99: text")
-          // Treat as continuation of the previous valid date.
+          // Matched date-like pattern, but parseISO failed (e.g., "2024-99-99: text")
           parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
         }
-        // If regex matched, date was invalid, AND no description, this line is skipped.
       } catch (e) {
-         // Catch errors specifically from parseISO (e.g., completely malformed string)
-         if (lastValidDate && line.trim()) { // If there's text and a previous date context
+         if (lastValidDate && line.trim()) {
             parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
           }
       }
     } else if (lastValidDate && line.trim() && !line.toLowerCase().startsWith('week ')) {
-      // This is a continuation line (doesn't start with YYYY-MM-DD)
       parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false });
     }
   }
@@ -89,6 +79,7 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
 
 
 function getScheduleListItems(rawPlanText: string): PlanListItem[] {
+  if (!rawPlanText) return [];
   const datePrefixRegex = /^(\d{4}-\d{2}-\d{2})/;
   const dayNameRegex = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i;
   const weekHeaderRegex = /^week\s+\d+/i;
@@ -96,8 +87,8 @@ function getScheduleListItems(rawPlanText: string): PlanListItem[] {
   return rawPlanText.split('\n')
       .map(line => line.trim())
       .filter(line => line !== "")
-      .map((line, index) => ({ 
-        id: `item-${index}`, 
+      .map((line, index) => ({
+        id: `item-${index}`,
         text: line,
         isWeekHeader: weekHeaderRegex.test(line),
         isDateLine: datePrefixRegex.test(line) || dayNameRegex.test(line)
@@ -106,13 +97,22 @@ function getScheduleListItems(rawPlanText: string): PlanListItem[] {
 
 
 export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDisplayProps) {
-  const planEnded = isPast(parseISO(plan.endDate));
+  const planEnded = plan?.endDate ? isPast(parseISO(plan.endDate)) : false;
   const [activeTab, setActiveTab] = useState("schedule");
-  
+
   const [calendarWorkouts, setCalendarWorkouts] = useState<ParsedWorkout[]>([]);
   const [scheduleListItems, setScheduleListItems] = useState<PlanListItem[]>([]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>();
 
+  const initialCalendarMonth = useMemo(() => {
+    return plan && plan.startDate && isValid(parseISO(plan.startDate)) ? parseISO(plan.startDate) : new Date();
+  }, [plan]);
+
+  const [currentDisplayMonth, setCurrentDisplayMonth] = useState<Date>(initialCalendarMonth);
+
+  useEffect(() => {
+    setCurrentDisplayMonth(initialCalendarMonth);
+  }, [initialCalendarMonth]);
 
   useEffect(() => {
     if (plan?.rawPlanText && plan.startDate && plan.endDate) {
@@ -145,14 +145,12 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
     if (workoutsByDate.has(dayKey)) {
       setSelectedCalendarDate(day);
     } else {
-      setSelectedCalendarDate(undefined); 
+      setSelectedCalendarDate(undefined);
     }
   };
-  
-  const initialCalendarMonth = useMemo(() => {
-    return plan && isValid(parseISO(plan.startDate)) ? parseISO(plan.startDate) : new Date();
-  }, [plan]);
 
+  const planStartDateValid = plan && plan.startDate && isValid(parseISO(plan.startDate));
+  const planEndDateValid = plan && plan.endDate && isValid(parseISO(plan.endDate));
 
   return (
     <Card className="w-full shadow-lg">
@@ -161,17 +159,19 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
           <div>
             <CardTitle className="text-2xl">Your Training Plan</CardTitle>
             <CardDescription>
-              From {plan.startDate ? format(parseISO(plan.startDate), 'MMMM d, yyyy') : 'N/A'} to {plan.endDate ? format(parseISO(plan.endDate), 'MMMM d, yyyy') : 'N/A'}
+              From {planStartDateValid ? format(parseISO(plan.startDate), 'MMMM d, yyyy') : 'N/A'} to {planEndDateValid ? format(parseISO(plan.endDate), 'MMMM d, yyyy') : 'N/A'}
             </CardDescription>
           </div>
           <CalendarIconHeader className="h-8 w-8 text-primary" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-sm mt-2 pt-2 border-t">
-            <p><span className="font-medium">Goal:</span> {plan.goal}</p>
-            <p><span className="font-medium">Level:</span> {plan.fitnessLevel}</p>
-            <p><span className="font-medium">Days/Week:</span> {plan.daysPerWeek}</p>
-            <p className="col-span-2 md:col-span-1"><span className="font-medium">Experience:</span> {plan.runningExperience}</p>
-        </div>
+        {plan && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-sm mt-2 pt-2 border-t">
+              <p><span className="font-medium">Goal:</span> {plan.goal}</p>
+              <p><span className="font-medium">Level:</span> {plan.fitnessLevel}</p>
+              <p><span className="font-medium">Days/Week:</span> {plan.daysPerWeek}</p>
+              <p className="col-span-2 md:col-span-1"><span className="font-medium">Experience:</span> {plan.runningExperience}</p>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {planEnded && (
@@ -205,11 +205,11 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                   <ScrollArea className="h-[400px] pr-4">
                     <ul className="space-y-1">
                       {scheduleListItems.map((item) => (
-                        <li 
-                          key={item.id} 
+                        <li
+                          key={item.id}
                           className={`
                             ${item.isWeekHeader ? 'font-bold text-lg text-primary mt-4 pt-2 border-t-2 border-primary/70 mb-2' : ''}
-                            ${item.isDateLine && !item.isWeekHeader ? 'font-semibold text-md text-primary-focus mt-3 border-b border-border pb-1' : ''}
+                            ${item.isDateLine && !item.isWeekHeader ? 'font-semibold text-md text-foreground mt-3 border-b border-border pb-1' : ''}
                             ${!item.isWeekHeader && !item.isDateLine ? 'pl-4 text-sm text-muted-foreground' : ''}
                           `}
                         >
@@ -232,24 +232,25 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
                 <CardDescription>Visualize your workouts. Click on a day for details.</CardDescription>
               </CardHeader>
               <CardContent className="flex justify-center">
-                {calendarWorkouts.length > 0 && isValid(parseISO(plan.startDate)) && isValid(parseISO(plan.endDate)) ? (
+                {calendarWorkouts.length > 0 && planStartDateValid && planEndDateValid ? (
                   <Popover open={!!selectedCalendarDate} onOpenChange={(isOpen) => !isOpen && setSelectedCalendarDate(undefined)}>
                     <PopoverTrigger asChild>
-                      <div> 
+                      <div>
                         <ShadcnCalendar
                           mode="single"
                           selected={selectedCalendarDate}
-                          onSelect={setSelectedCalendarDate} 
+                          onSelect={setSelectedCalendarDate}
                           onDayClick={handleDayClick}
-                          month={initialCalendarMonth} 
+                          month={currentDisplayMonth}
+                          onMonthChange={setCurrentDisplayMonth}
                           fromDate={parseISO(plan.startDate)}
                           toDate={parseISO(plan.endDate)}
-                          modifiers={{ 
+                          modifiers={{
                             workoutDay: calendarWorkoutDays,
                             disabled: (date) => !isWithinInterval(date, {start: parseISO(plan.startDate), end: parseISO(plan.endDate)})
                           }}
                           modifiersClassNames={{
-                            workoutDay: 'bg-primary/30 rounded-md !text-primary-foreground font-semibold',
+                            workoutDay: 'bg-primary/70 rounded-md !text-primary-foreground font-semibold hover:bg-primary/90',
                           }}
                           className="rounded-md border shadow-sm"
                         />
