@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,25 +20,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useUser, useFirestore, setDocumentNonBlocking, updateDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase';
-import { doc, collection, serverTimestamp } from 'firebase/firestore';
+import { useUser, useFirestore, setDocumentNonBlocking, updateDocumentNonBlocking } from '@/firebase';
+import { doc, collection } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import type { User as AppUser, TrainingPlan as AppTrainingPlan } from '@/lib/firebase-schemas';
-import { UserProfileSchema } from '@/lib/firebase-schemas';
+import { UserProfileSchema } from '@/lib/firebase-schemas'; // UserProfileSchema.shape.goal is now an enum
 import { useState, useEffect } from 'react';
 import { generateTrainingPlan } from '@/ai/flows';
-import { format, addDays, differenceInCalendarWeeks } from 'date-fns';
+import { format, addDays, differenceInCalendarDays, isValid } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const TrainingPlanSetupSchema = z.object({
   fitnessLevel: UserProfileSchema.shape.fitnessLevel,
   runningExperience: UserProfileSchema.shape.runningExperience,
-  goal: UserProfileSchema.shape.goal,
+  goal: UserProfileSchema.shape.goal, // This is now an enum from UserProfileSchema
   daysPerWeek: UserProfileSchema.shape.daysPerWeek,
   startDate: z.date({ required_error: "Start date is required." }),
+  targetRaceDate: z.date().optional(),
   durationWeeks: z.number().min(1, "Duration must be at least 1 week.").max(52, "Duration cannot exceed 52 weeks."),
   additionalNotes: z.string().optional(),
+}).refine(data => {
+  if (data.targetRaceDate && data.startDate && data.targetRaceDate < data.startDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Target race date cannot be before the start date.",
+  path: ["targetRaceDate"],
 });
 
 type TrainingPlanSetupValues = z.infer<typeof TrainingPlanSetupSchema>;
@@ -61,23 +71,42 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
       goal: currentUserData.profile.goal,
       daysPerWeek: currentUserData.profile.daysPerWeek,
       startDate: new Date(),
-      durationWeeks: 12, // Default duration
+      targetRaceDate: undefined,
+      durationWeeks: 12, 
       additionalNotes: '',
     },
   });
 
-  // Sync form with profile updates
+  const { watch, setValue, getValues } = form;
+  const watchedStartDate = watch("startDate");
+  const watchedTargetRaceDate = watch("targetRaceDate");
+  const watchedDurationWeeks = watch("durationWeeks");
+
+  useEffect(() => {
+    if (watchedStartDate && watchedTargetRaceDate && isValid(watchedStartDate) && isValid(watchedTargetRaceDate)) {
+      if (watchedTargetRaceDate >= watchedStartDate) {
+        const diffDays = differenceInCalendarDays(watchedTargetRaceDate, watchedStartDate) + 1; // Inclusive
+        const weeks = Math.max(1, Math.ceil(diffDays / 7));
+        if (weeks !== watchedDurationWeeks) {
+           setValue("durationWeeks", weeks, { shouldValidate: true });
+        }
+      }
+    }
+  }, [watchedStartDate, watchedTargetRaceDate, setValue, watchedDurationWeeks]);
+
   useEffect(() => {
     form.reset({
       fitnessLevel: currentUserData.profile.fitnessLevel,
       runningExperience: currentUserData.profile.runningExperience,
       goal: currentUserData.profile.goal,
       daysPerWeek: currentUserData.profile.daysPerWeek,
-      startDate: form.getValues("startDate") || new Date(), // Keep user selected date if any
-      durationWeeks: form.getValues("durationWeeks") || 12,
-      additionalNotes: form.getValues("additionalNotes") || '',
+      startDate: getValues("startDate") || new Date(),
+      targetRaceDate: getValues("targetRaceDate"),
+      durationWeeks: getValues("durationWeeks") || 12,
+      additionalNotes: getValues("additionalNotes") || '',
     });
-  }, [currentUserData, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserData, form.reset]); // form.getValues removed from deps as it causes loop, rely on currentUserData
 
 
   const onSubmit = async (data: TrainingPlanSetupValues) => {
@@ -87,7 +116,12 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
     }
     setIsSubmitting(true);
 
-    const endDate = addDays(data.startDate, data.durationWeeks * 7 -1); // -1 because start date is day 1
+    let calculatedEndDate: Date;
+    if (data.targetRaceDate && isValid(data.targetRaceDate)) {
+      calculatedEndDate = data.targetRaceDate;
+    } else {
+      calculatedEndDate = addDays(data.startDate, data.durationWeeks * 7 - 1);
+    }
 
     try {
       const planInput = {
@@ -96,14 +130,15 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
         goal: data.goal,
         daysPerWeek: data.daysPerWeek,
         startDate: format(data.startDate, 'yyyy-MM-dd'),
-        endDate: format(endDate, 'yyyy-MM-dd'),
+        endDate: format(calculatedEndDate, 'yyyy-MM-dd'),
+        targetRaceDate: data.targetRaceDate ? format(data.targetRaceDate, 'yyyy-MM-dd') : undefined,
         additionalNotes: data.additionalNotes || '',
       };
 
       const aiResult = await generateTrainingPlan(planInput);
 
       const trainingPlansColRef = collection(firestore, 'trainingPlans');
-      const newPlanRef = doc(trainingPlansColRef); // Auto-generate ID
+      const newPlanRef = doc(trainingPlansColRef); 
 
       const newPlanData: AppTrainingPlan = {
         id: newPlanRef.id,
@@ -119,7 +154,6 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
       
       setDocumentNonBlocking(newPlanRef, newPlanData, {});
 
-      // Update user's trainingPlanId
       const userDocRef = doc(firestore, 'users', auth.user.uid);
       updateDocumentNonBlocking(userDocRef, { trainingPlanId: newPlanRef.id });
       
@@ -131,7 +165,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
       toast({
         variant: 'destructive',
         title: 'Generation Failed',
-        description: 'Could not generate training plan. Please try again.',
+        description: (error as Error).message || 'Could not generate training plan. Please try again.',
       });
     } finally {
       setIsSubmitting(false);
@@ -156,10 +190,10 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
                 name="fitnessLevel"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Fitness Level</FormLabel>
+                    <FormLabel>Running Level</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger><SelectValue placeholder="Select fitness level" /></SelectTrigger>
+                        <SelectTrigger><SelectValue placeholder="Select running level" /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="Beginner">Beginner</SelectItem>
@@ -209,10 +243,19 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
               name="goal"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Primary Goal</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Run a 5k, Complete a marathon" {...field} />
-                  </FormControl>
+                  <FormLabel>Primary Goal (Race Distance)</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Select your target race" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="5K">5K</SelectItem>
+                      <SelectItem value="10K">10K</SelectItem>
+                      <SelectItem value="Half Marathon">Half Marathon</SelectItem>
+                      <SelectItem value="Marathon">Marathon</SelectItem>
+                      <SelectItem value="50K/Ultramarathon">50K/Ultramarathon</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -235,7 +278,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                            {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a date</span>}
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
@@ -244,7 +287,7 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < addDays(new Date(), -1) } // Allow today, disable past
+                          disabled={(date) => date < addDays(new Date(), -1) }
                           initialFocus
                         />
                       </PopoverContent>
@@ -255,18 +298,69 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
               />
               <FormField
                 control={form.control}
-                name="durationWeeks"
+                name="targetRaceDate"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plan Duration (weeks)</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g., 12" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
-                    </FormControl>
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Target Race Date (Optional)</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {field.value && isValid(field.value) ? format(field.value, "PPP") : <span>Pick a race date</span>}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                          }}
+                           disabled={(date) => 
+                            (watchedStartDate && isValid(watchedStartDate) && date < watchedStartDate) || 
+                            date < new Date(new Date().setHours(0,0,0,0)) // Disable past dates from today
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>If set, plan duration will be calculated.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
+            <FormField
+              control={form.control}
+              name="durationWeeks"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Plan Duration (weeks)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      placeholder="e.g., 12" 
+                      {...field} 
+                      onChange={e => field.onChange(parseInt(e.target.value,10) || 0)}
+                      disabled={!!watchedTargetRaceDate} 
+                      readOnly={!!watchedTargetRaceDate}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {watchedTargetRaceDate ? "Calculated based on start and target race date." : "Or select a target race date above."}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="additionalNotes"
@@ -290,3 +384,4 @@ export function TrainingPlanSetup({ currentUserData, onPlanGenerated }: Training
     </Card>
   );
 }
+

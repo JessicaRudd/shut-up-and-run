@@ -1,3 +1,4 @@
+
 // src/ai/flows/generate-training-plan.ts
 'use server';
 /**
@@ -14,13 +15,13 @@ import {z} from 'genkit';
 const GenerateTrainingPlanInputSchema = z.object({
   fitnessLevel: z
     .enum(['Beginner', 'Intermediate', 'Advanced'])
-    .describe('The user fitness level: Beginner, Intermediate, or Advanced.'),
+    .describe('The user running level: Beginner, Intermediate, or Advanced.'),
   runningExperience: z
     .string()
     .describe('Description of the users running experience.'),
   goal: z
-    .string()
-    .describe('The users goal, such as completing a 5k, 10k, half marathon, or marathon.'),
+    .enum(["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"])
+    .describe('The users goal race distance (e.g., 5K, 10K, Half Marathon, Marathon, 50K/Ultramarathon).'),
   daysPerWeek: z
     .number()
     .int()
@@ -32,7 +33,11 @@ const GenerateTrainingPlanInputSchema = z.object({
     .describe('The start date for the training plan (YYYY-MM-DD).'),
   endDate: z
     .string()
-    .describe('The end date for the training plan (YYYY-MM-DD).'),
+    .describe('The end date for the training plan (YYYY-MM-DD). This is calculated based on duration or target race date.'),
+  targetRaceDate: z
+    .string()
+    .optional()
+    .describe('The optional target race date (YYYY-MM-DD). If provided, the plan will be built around this date.'),
   additionalNotes: z
     .string()
     .optional()
@@ -59,12 +64,16 @@ const prompt = ai.definePrompt({
 
   Based on the following information, generate a detailed training plan for the user.
 
-  Fitness Level: {{{fitnessLevel}}}
+  Running Level: {{{fitnessLevel}}}
   Running Experience: {{{runningExperience}}}
   Goal: {{{goal}}}
   Days Per Week: {{{daysPerWeek}}}
   Start Date: {{{startDate}}}
-  End Date: {{{endDate}}}
+  {{#if targetRaceDate}}
+  Target Race Date: {{{targetRaceDate}}}
+  {{else}}
+  Calculated End Date for Plan: {{{endDate}}}
+  {{/if}}
   Additional Notes: {{{additionalNotes}}}
 
   The training plan should include specific workouts for each day, including:
@@ -74,8 +83,12 @@ const prompt = ai.definePrompt({
   - Any additional instructions or notes
 
   The training plan should be formatted for readability.
-  Ensure the plan is tailored to the user's fitness level, experience, goal, and the number of days per week they can train.
-  Consider the start and end dates to create a plan that progressively increases in difficulty.
+  Ensure the plan is tailored to the user's running level, experience, goal, and the number of days per week they can train.
+  {{#if targetRaceDate}}
+  Structure the plan to build towards the Target Race Date. The plan must end on or just before the Target Race Date.
+  {{else}}
+  Consider the start and end dates to create a plan that progressively increases in difficulty over the specified duration.
+  {{/if}}
   Take into account any additional notes or preferences from the user.
   Use a friendly, encouraging tone.
   DO NOT INCLUDE ANY INFORMATION ABOUT YOURSELF, ONLY INCLUDE THE TRAINING PLAN.
@@ -93,3 +106,4 @@ const generateTrainingPlanFlow = ai.defineFlow(
     return output!;
   }
 );
+

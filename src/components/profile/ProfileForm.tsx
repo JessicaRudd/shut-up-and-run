@@ -18,10 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUser, useFirestore, useDoc, updateDocumentNonBlocking } from '@/firebase';
-import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, DocumentReference } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { UserSchema, UserProfileSchema, type User as AppUser } from '@/lib/firebase-schemas';
+import { UserProfileSchema, type User as AppUser } from '@/lib/firebase-schemas';
 import { useEffect, useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +30,7 @@ const ProfileFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   email: z.string().email(), // Display only, not editable via this form for simplicity
-  profile: UserProfileSchema,
+  profile: UserProfileSchema, // UserProfileSchema now includes locationCity and weatherUnit
 });
 
 type ProfileFormValues = z.infer<typeof ProfileFormSchema>;
@@ -65,17 +64,14 @@ export function ProfileForm() {
         firstName: userData.firstName,
         lastName: userData.lastName,
         email: userData.email,
-        profile: userData.profile,
+        profile: UserProfileSchema.parse(userData.profile || {}), // Ensure profile is parsed against schema for defaults
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
-      // If userData is not found but authUser exists, populate with authUser info
-      // This can happen if the user document wasn't created on signup for some reason
-      // or for anonymous users if we decide to let them have a profile.
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
         email: authUser.email || '',
-        profile: UserProfileSchema.parse({}), // Parse to get schema defaults
+        profile: UserProfileSchema.parse({}), 
       });
     }
   }, [userData, authUser, form, isUserDataLoading, userDataError]);
@@ -87,11 +83,10 @@ export function ProfileForm() {
     }
     setIsSubmitting(true);
     try {
-      // We only update fields that are part of AppUser, excluding email from direct update here
       const updateData: Partial<AppUser> = {
         firstName: data.firstName,
         lastName: data.lastName,
-        profile: data.profile,
+        profile: data.profile, // This now includes locationCity and weatherUnit
       };
       updateDocumentNonBlocking(userDocRef, updateData);
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
@@ -118,7 +113,6 @@ export function ProfileForm() {
   if (userDataError) {
      return <p className="text-destructive">Error loading profile data: {userDataError.message}</p>;
   }
-
 
   return (
     <Card className="w-full max-w-2xl mx-auto shadow-lg">
@@ -180,11 +174,11 @@ export function ProfileForm() {
               name="profile.fitnessLevel"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Fitness Level</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}> {/* Ensure value prop is used */}
+                  <FormLabel>Running Level</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select your fitness level" />
+                        <SelectValue placeholder="Select your running level" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -218,9 +212,20 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Primary Goal</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Complete a 5k, Run a half marathon, Improve pace" {...field} />
-                  </FormControl>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your primary goal" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="5K">5K</SelectItem>
+                      <SelectItem value="10K">10K</SelectItem>
+                      <SelectItem value="Half Marathon">Half Marathon</SelectItem>
+                      <SelectItem value="Marathon">Marathon</SelectItem>
+                      <SelectItem value="50K/Ultramarathon">50K/Ultramarathon</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -232,7 +237,7 @@ export function ProfileForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Training Days Per Week</FormLabel>
-                  <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}> {/* Ensure value prop is used */}
+                  <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select days" />
@@ -244,6 +249,44 @@ export function ProfileForm() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <h3 className="text-lg font-medium pt-4 border-t">Weather & Location Preferences</h3>
+             <FormField
+              control={form.control}
+              name="profile.locationCity"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Location (City)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., New York" {...field} />
+                  </FormControl>
+                  <FormDescription>Used for local weather forecasts on your dashboard.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="profile.weatherUnit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Weather Unit</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select temperature unit" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="C">Celsius (°C)</SelectItem>
+                      <SelectItem value="F">Fahrenheit (°F)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>Preferred unit for temperature display.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -291,7 +334,6 @@ export function ProfileForm() {
                 </FormItem>
               )}
             />
-
 
             <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

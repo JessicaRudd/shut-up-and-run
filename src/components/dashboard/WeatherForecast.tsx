@@ -1,73 +1,110 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Sun, CloudRain, Shirt } from 'lucide-react'; // Example icons
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Sun, CloudRain, Shirt, Thermometer } from 'lucide-react'; 
 import { Skeleton } from '@/components/ui/skeleton';
+import type { DashboardCache } from '@/lib/firebase-schemas';
+
+
+interface WeatherInfo {
+  forecast: string;
+  clothingRecommendation: string;
+  locationCity?: string;
+  weatherUnit?: 'C' | 'F';
+}
 
 interface WeatherForecastProps {
-  cachedWeather?: { forecast: string; clothingRecommendation: string };
-  onWeatherGenerated: (weather: { forecast: string; clothingRecommendation: string }) => void;
+  locationCity?: string;
+  weatherUnit?: 'C' | 'F';
+  cachedWeather?: WeatherInfo;
+  onWeatherGenerated: (weather: WeatherInfo) => void;
 }
 
 // Placeholder function to simulate fetching weather and generating advice
-// In a real app, this would call an API and potentially an AI for clothing advice
-const getWeatherData = async (): Promise<{ forecast: string; clothingRecommendation: string }> => {
+const getWeatherData = async (locationCity?: string, weatherUnit: 'C' | 'F' = 'C'): Promise<WeatherInfo> => {
   await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
-  // Dummy data
-  const forecasts = [
-    { forecast: "Sunny, 25°C. Perfect running weather!", recommendation: "Light t-shirt, shorts, and don't forget sunscreen!" },
-    { forecast: "Cloudy, 18°C. Cool and pleasant.", recommendation: "Long-sleeve shirt and running tights or pants." },
-    { forecast: "Light rain, 15°C. A bit wet.", recommendation: "Water-resistant jacket, cap, and be mindful of slippery surfaces." },
-  ];
-  return forecasts[Math.floor(Math.random() * forecasts.length)];
+  
+  const tempC = Math.floor(Math.random() * 20) + 10; // Random temp between 10-29 C
+  const tempF = Math.round(tempC * 9/5 + 32);
+  const displayTemp = weatherUnit === 'F' ? tempF : tempC;
+
+  const conditions = ["Sunny", "Cloudy", "Partly Cloudy", "Light Rain"];
+  const currentCondition = conditions[Math.floor(Math.random() * conditions.length)];
+  
+  let recommendation = "Dress in layers.";
+  if (displayTemp > (weatherUnit === 'F' ? 75 : 24)) recommendation = "Light t-shirt, shorts, and don't forget sunscreen!";
+  else if (displayTemp > (weatherUnit === 'F' ? 60 : 15)) recommendation = "Long-sleeve shirt and running tights or pants.";
+  else if (displayTemp > (weatherUnit === 'F' ? 45 : 7)) recommendation = "Warm jacket, hat, and gloves might be needed.";
+  else recommendation = "Very cold! Multiple layers, hat, gloves, and consider indoor options.";
+
+  if (currentCondition.includes("Rain")) recommendation += " Add a water-resistant jacket.";
+
+  return {
+    forecast: `${currentCondition}, ${displayTemp}°${weatherUnit} in ${locationCity || 'your area'}.`,
+    clothingRecommendation: recommendation,
+    locationCity: locationCity,
+    weatherUnit: weatherUnit,
+  };
 };
 
 
-export function WeatherForecast({ cachedWeather, onWeatherGenerated }: WeatherForecastProps) {
-  const [weatherData, setWeatherData] = useState<{ forecast: string; clothingRecommendation: string } | null>(cachedWeather || null);
+export function WeatherForecast({ locationCity, weatherUnit = 'C', cachedWeather, onWeatherGenerated }: WeatherForecastProps) {
+  const [weatherData, setWeatherData] = useState<WeatherInfo | null>(cachedWeather || null);
   const [isLoading, setIsLoading] = useState(!cachedWeather);
   
   useEffect(() => {
-    if (cachedWeather) {
+    // If cache exists and matches current profile settings, use it
+    if (cachedWeather && cachedWeather.locationCity === locationCity && cachedWeather.weatherUnit === weatherUnit) {
       setWeatherData(cachedWeather);
       setIsLoading(false);
       return;
     }
 
+    // Otherwise, fetch new data
     async function fetchWeather() {
       setIsLoading(true);
       try {
-        const data = await getWeatherData(); // Replace with actual weather fetching & AI call
+        const data = await getWeatherData(locationCity, weatherUnit);
         setWeatherData(data);
         onWeatherGenerated(data);
       } catch (error) {
         console.error("Failed to fetch weather data:", error);
-        const fallback = { forecast: "Could not load weather data.", clothingRecommendation: "Check your local weather app." };
+        const fallback: WeatherInfo = { 
+            forecast: "Could not load weather data.", 
+            clothingRecommendation: "Check your local weather app.",
+            locationCity,
+            weatherUnit
+        };
         setWeatherData(fallback);
         onWeatherGenerated(fallback);
       } finally {
         setIsLoading(false);
       }
     }
-    if(!weatherData){
-      fetchWeather();
+    
+    // Fetch if no weatherData or if location/unit changed from cache
+    if (!weatherData || weatherData.locationCity !== locationCity || weatherData.weatherUnit !== weatherUnit) {
+        fetchWeather();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cachedWeather]);
+  }, [locationCity, weatherUnit, cachedWeather]); // onWeatherGenerated removed to prevent potential loops if it causes parent re-render
 
+
+  const Icon = weatherData?.forecast?.includes("Sun") ? Sun : weatherData?.forecast?.includes("Rain") ? CloudRain : Thermometer;
 
   return (
     <Card className="shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg font-medium">Weather & Gear</CardTitle>
-        {/* Choose an icon based on weather, e.g. weatherData?.forecast.includes("Sun") ? <Sun/> : <CloudRain/> */}
-        <Sun className="h-5 w-5 text-accent" />
+        <Icon className="h-5 w-5 text-accent" />
       </CardHeader>
       <CardContent>
         {isLoading ? (
           <>
             <Skeleton className="h-5 w-3/4 mb-2" />
+            <Skeleton className="h-4 w-full mb-1" />
             <Skeleton className="h-4 w-1/2" />
           </>
         ) : (
@@ -83,3 +120,4 @@ export function WeatherForecast({ cachedWeather, onWeatherGenerated }: WeatherFo
     </Card>
   );
 }
+
