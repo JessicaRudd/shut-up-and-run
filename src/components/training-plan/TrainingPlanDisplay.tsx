@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo, type ComponentProps } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
 import type { DayPicker, DayProps } from 'react-day-picker'; // Import DayProps
 
@@ -51,8 +51,7 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
     const weekMatch = line.match(weekRegexGlobal);
     if (weekMatch) {
       currentWeekHeader = weekMatch[1].trim();
-      // Don't add week headers as workouts themselves, just track it
-      continue; 
+      continue;
     }
 
     const match = line.match(datePrefixRegex);
@@ -67,14 +66,16 @@ function parseCalendarWorkouts(rawPlanText: string, planStartDateStr: string, pl
           }
           lastValidDate = date;
         } else if (description && lastValidDate) {
+          // This handles cases where the date might be invalid, but we still want to attach the description to the previous valid date
           parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false, weekHeader: currentWeekHeader });
         }
       } catch (e) {
+         // Handle potential errors from parseISO or if description is somehow problematic
          if (lastValidDate && line.trim()) {
             parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false, weekHeader: currentWeekHeader });
           }
       }
-    } else if (lastValidDate && line.trim()) { 
+    } else if (lastValidDate && line.trim()) {
       // This line is part of the previous date's workout, but not a new date or week header.
       parsed.push({ date: lastValidDate, description: line.trim(), isPrimary: false, weekHeader: currentWeekHeader });
     }
@@ -107,7 +108,7 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
 
   const [calendarWorkouts, setCalendarWorkouts] = useState<ParsedWorkout[]>([]);
   const [scheduleListItems, setScheduleListItems] = useState<PlanListItem[]>([]);
-  
+
   const initialCalendarMonth = useMemo(() => {
     return plan && plan.startDate && isValid(parseISO(plan.startDate)) ? parseISO(plan.startDate) : new Date();
   }, [plan]);
@@ -154,47 +155,48 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
     const dayKey = format(props.date, 'yyyy-MM-dd');
     const dayWorkouts = workoutsByDate.get(dayKey);
     const isWorkoutDay = dayWorkouts && dayWorkouts.length > 0;
-    
+
     const dayButtonBaseClass = cn(
       buttonVariants({ variant: "ghost" }),
       "h-9 w-9 p-0 font-normal",
-      props.modifiers.today && "bg-accent text-accent-foreground",
-      props.modifiers.selected && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-      props.modifiers.disabled && "text-muted-foreground opacity-50",
-      props.modifiers.outside && "text-muted-foreground opacity-50 day-outside",
-       isWorkoutDay && !props.modifiers.selected && "bg-primary/20 text-primary-foreground font-semibold hover:bg-primary/40" // Custom style for workout days
+      props.modifiers?.today && "bg-accent text-accent-foreground",
+      props.modifiers?.selected && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+      props.modifiers?.disabled && "text-muted-foreground opacity-50",
+      props.modifiers?.outside && "text-muted-foreground opacity-50 day-outside",
+       isWorkoutDay && !props.modifiers?.selected && "bg-primary/20 text-primary font-semibold hover:bg-primary/30"
     );
      const dayButtonContent = format(props.date, "d");
 
-    if (isWorkoutDay && !props.modifiers.disabled && !props.modifiers.outside) {
+    if (isWorkoutDay && !props.modifiers?.disabled && !props.modifiers?.outside) {
       const weekHeader = dayWorkouts[0]?.weekHeader;
       return (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              {...props.buttonProps} // Spread default button props from react-day-picker
-              className={dayButtonBaseClass}
-            >
-              {dayButtonContent}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent className="w-80 max-h-96 overflow-y-auto text-left shadow-lg bg-card text-card-foreground p-4 rounded-md border">
-            <div className="grid gap-2">
-              {weekHeader && <h4 className="font-semibold leading-none text-md text-primary">{weekHeader}</h4>}
-              <ul className="space-y-1 text-sm">
-                {dayWorkouts.map((workout, index) => (
-                  <li key={index} className={`${workout.isPrimary ? 'font-medium' : 'pl-3 text-muted-foreground'}`}>
-                    {workout.description}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </TooltipContent>
-        </Tooltip>
+        <TooltipProvider delayDuration={100}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                {...props.buttonProps}
+                className={dayButtonBaseClass}
+              >
+                {dayButtonContent}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="w-80 max-h-96 overflow-y-auto text-left shadow-lg bg-card text-card-foreground p-4 rounded-md border">
+              <div className="grid gap-2">
+                {weekHeader && <h4 className="font-semibold leading-none text-md text-primary">{weekHeader}</h4>}
+                <ul className="space-y-1 text-sm">
+                  {dayWorkouts.map((workout, index) => (
+                    <li key={index} className={`${workout.isPrimary ? 'font-medium' : 'pl-3 text-muted-foreground'}`}>
+                      {workout.description}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     }
 
-    // Default rendering for days without workouts or disabled/outside days
     return (
       <button
         {...props.buttonProps}
@@ -287,24 +289,21 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
               </CardHeader>
               <CardContent className="flex justify-center">
                 {calendarWorkouts.length > 0 && planStartDateValid && planEndDateValid ? (
-                  <div> {/* Removed Popover wrapper */}
+                  <div>
                     <ShadcnCalendar
                       mode="single"
-                      selected={selectedDayForStyle} // Used for styling selection
-                      onSelect={setSelectedDayForStyle} // Allows selecting a day for style
+                      selected={selectedDayForStyle}
+                      onSelect={setSelectedDayForStyle}
                       month={currentDisplayMonth}
                       onMonthChange={setCurrentDisplayMonth}
                       fromDate={parseISO(plan.startDate)}
                       toDate={parseISO(plan.endDate)}
                       modifiers={{
-                        workoutDay: calendarWorkoutDays, // For potential specific workout day styling
+                        workoutDay: calendarWorkoutDays,
                         disabled: (date) => !isWithinInterval(date, {start: parseISO(plan.startDate), end: parseISO(plan.endDate)})
                       }}
-                      modifiersClassNames={{
-                        // workoutDay style is now handled within CustomDay or by combining with selected/today
-                      }}
                       components={{
-                        Day: CustomDay, // Use the custom Day component
+                        Day: CustomDay,
                       }}
                       className="rounded-md border shadow-sm"
                     />
@@ -329,3 +328,4 @@ export function TrainingPlanDisplay({ plan, onSetupNewPlan }: TrainingPlanDispla
     </Card>
   );
 }
+
