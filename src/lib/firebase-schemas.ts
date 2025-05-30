@@ -20,7 +20,7 @@ export type UserProfile = z.infer<typeof UserProfileSchema>;
 
 export const UserSchema = z.object({
   id: z.string(), // Firebase UID
-  email: z.string().email(),
+  email: z.string().email().optional(), // Make email optional for anonymous users
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   profile: UserProfileSchema.default({
@@ -77,3 +77,4 @@ export const DashboardCacheSchema = z.object({
   runningNews: z.array(z.string()),
 });
 export type DashboardCache = z.infer<typeof DashboardCacheSchema>;
+

@@ -17,7 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useUser, useFirestore, useDoc, updateDocumentNonBlocking } from '@/firebase';
+import { useUser, useFirestore, useDoc, setDocumentNonBlocking } from '@/firebase'; // Changed import
 import { doc, type DocumentReference } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { UserProfileSchema, type User as AppUser, type UserProfile } from '@/lib/firebase-schemas';
@@ -29,7 +29,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 const ProfileFormSchema = z.object({
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
-  email: z.string().email(), // Display only, not editable via this form for simplicity
+  email: z.string().email().or(z.literal('')), // Email can be a valid email or empty string for display
   profile: UserProfileSchema,
 });
 
@@ -55,7 +55,7 @@ export function ProfileForm() {
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: '',
+      email: '', // Will be populated by useEffect
       profile: UserProfileSchema.parse({}), 
     },
   });
@@ -64,28 +64,24 @@ export function ProfileForm() {
     if (userData) {
       let profileToSet;
       try {
-        // Try to parse existing profile. This will validate it and apply defaults for missing fields.
-        // If userData.profile is null/undefined, parse({}) will give full defaults.
         profileToSet = UserProfileSchema.parse(userData.profile || {});
       } catch (e) {
-        // If parsing fails (e.g., old enum values, missing required fields that now have defaults),
-        // fall back to using fresh defaults for the entire profile.
         console.warn("Failed to parse existing user profile, falling back to schema defaults:", e);
         profileToSet = UserProfileSchema.parse({});
       }
       form.reset({
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        email: userData.email,
+        firstName: userData.firstName || '', // Ensure fallback for potentially missing fields
+        lastName: userData.lastName || '',
+        email: userData.email || '', // Use stored email or empty string
         profile: profileToSet,
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
-      // New user or user with no Firestore doc yet (e.g., right after anonymous sign-in)
+      // New user or user with no Firestore doc yet
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
-        email: authUser.email || '',
-        profile: UserProfileSchema.parse({}), // Get all defaults from schema
+        email: authUser.email || '', // Will be empty string for anonymous users, display only
+        profile: UserProfileSchema.parse({}),
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,18 +89,28 @@ export function ProfileForm() {
 
 
   const onSubmit = async (data: ProfileFormValues) => {
-    if (!userDocRef) {
-      toast({ variant: 'destructive', title: 'Error', description: 'User not found.' });
+    if (!userDocRef || !authUser) { // Ensure authUser is also available
+      toast({ variant: 'destructive', title: 'Error', description: 'User not found or not authenticated.' });
       return;
     }
     setIsSubmitting(true);
     try {
-      const updateData: Partial<AppUser> = {
+      // Construct the data to save.
+      // For anonymous users, authUser.email will be null.
+      // The UserSchema now supports optional email.
+      const userDataToSave: Partial<AppUser> = {
         firstName: data.firstName,
         lastName: data.lastName,
-        profile: data.profile, // data.profile is already validated by the form
+        profile: data.profile,
       };
-      updateDocumentNonBlocking(userDocRef, updateData);
+
+      if (authUser.email) { // Only set email if it exists on authUser
+        userDataToSave.email = authUser.email;
+      }
+
+      // Use setDoc with merge:true to create or update the document.
+      setDocumentNonBlocking(userDocRef, userDataToSave, { merge: true });
+      
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
     } catch (error) {
       console.error('Profile update failed:', error);
@@ -177,7 +183,7 @@ export function ProfileForm() {
                   <FormControl>
                     <Input placeholder="Your email" {...field} disabled />
                   </FormControl>
-                  <FormDescription>Email cannot be changed here.</FormDescription>
+                  <FormDescription>Email cannot be changed here. For anonymous users, this will be blank.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -386,3 +392,4 @@ export function ProfileForm() {
     </Card>
   );
 }
+
