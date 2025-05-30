@@ -5,41 +5,35 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Helper function to check if the requesting user is the owner of the document
-    function isOwner(docUserId) {
-      return request.auth != null && request.auth.uid == docUserId;
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
+    // Users:
+    // - Authenticated users can create their own user document.
+    // - Users can read, update, and delete their own document.
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, update, delete: if isOwner(userId);
+      allow create: if request.auth != null && request.resource.data.id == request.auth.uid;
     }
 
+    // TrainingPlans:
+    // - Authenticated users can create training plans for themselves.
+    // - Users can read, update, and delete their own training plans.
+    // - Ensure userId cannot be changed on update.
     match /trainingPlans/{planId} {
-      // Allow create if the user is the owner of the new plan
+      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-
-      // Allow read if:
-      // 1. The requesting user's UID matches the userId field in the training plan document.
-      // OR
-      // 2. The requesting user is authenticated, their user document exists,
-      //    and their user document's trainingPlanId field matches the ID of this training plan.
-      allow read: if (request.auth != null && resource.data.userId == request.auth.uid) ||
-                     (
-                       request.auth != null &&
-                       exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.trainingPlanId == resource.id
-                     );
-
-      // Allow update if the user is the owner (userId in plan matches auth.uid)
-      // and they are not trying to change the userId field.
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid &&
-                       request.resource.data.userId == resource.data.userId;
-
-      // Allow delete if the user is the owner (userId in plan matches auth.uid)
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
     }
 
-    match /dashboardCache/{userId} { // Assuming dashboardCacheId is the userId
-      allow read, write: if isOwner(userId);
+    // DashboardCache:
+    // - Authenticated users can create their own dashboard cache.
+    // - Users can read, update, and delete their own dashboard cache.
+    // - Document ID is expected to be the userId.
+    match /dashboardCache/{userId} {
+      allow read, update, delete: if isOwner(userId);
+      allow create: if request.auth != null && request.resource.data.id == request.auth.uid && request.resource.data.userId == request.auth.uid;
     }
   }
 }

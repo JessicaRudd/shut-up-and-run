@@ -62,42 +62,35 @@ export function ProfileForm() {
 
   useEffect(() => {
     if (userData) {
-      const profileDataToParse = { ...(userData.profile || {}) };
-      const validGoalEnumValues = ["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"];
-
-      if (profileDataToParse.goal && !validGoalEnumValues.includes(profileDataToParse.goal as any)) {
-        try {
-          profileDataToParse.goal = UserProfileSchema.shape.goal.parse(undefined);
-        } catch (parseError) {
-            console.warn("Failed to parse default goal using Zod schema, falling back to hardcoded default '5K'. Error:", parseError);
-            profileDataToParse.goal = "5K";
-        }
+      let profileToSet;
+      try {
+        // Try to parse existing profile. This will validate it and apply defaults for missing fields.
+        // If userData.profile is null/undefined, parse({}) will give full defaults.
+        profileToSet = UserProfileSchema.parse(userData.profile || {});
+      } catch (e) {
+        // If parsing fails (e.g., old enum values, missing required fields that now have defaults),
+        // fall back to using fresh defaults for the entire profile.
+        console.warn("Failed to parse existing user profile, falling back to schema defaults:", e);
+        profileToSet = UserProfileSchema.parse({});
       }
-      
-      // Ensure preferredLongRunDay has a default if it's missing from existing data
-      if (!profileDataToParse.preferredLongRunDay) {
-        profileDataToParse.preferredLongRunDay = UserProfileSchema.shape.preferredLongRunDay.parse(undefined);
-      }
-
-
-      const parsedProfile = UserProfileSchema.parse(profileDataToParse);
-
       form.reset({
         firstName: userData.firstName,
         lastName: userData.lastName,
         email: userData.email,
-        profile: parsedProfile,
+        profile: profileToSet,
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
+      // New user or user with no Firestore doc yet (e.g., right after anonymous sign-in)
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
         email: authUser.email || '',
-        profile: UserProfileSchema.parse({}),
+        profile: UserProfileSchema.parse({}), // Get all defaults from schema
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData, authUser, form, isUserDataLoading, userDataError]);
+  }, [userData, authUser, form.reset, isUserDataLoading, userDataError]);
+
 
   const onSubmit = async (data: ProfileFormValues) => {
     if (!userDocRef) {
@@ -109,7 +102,7 @@ export function ProfileForm() {
       const updateData: Partial<AppUser> = {
         firstName: data.firstName,
         lastName: data.lastName,
-        profile: data.profile,
+        profile: data.profile, // data.profile is already validated by the form
       };
       updateDocumentNonBlocking(userDocRef, updateData);
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });

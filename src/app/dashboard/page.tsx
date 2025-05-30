@@ -134,7 +134,7 @@ export default function DashboardPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4">
-          <h2 className="text-2xl font-semibold mb-2">Welcome to RunMate!</h2>
+          <h2 className="text-2xl font-semibold mb-2">Welcome to Shut Up and Run!</h2>
           <p className="mb-4 text-muted-foreground">Please complete your profile to get started.</p>
           <Button onClick={() => router.push('/profile')}>Go to Profile</Button>
         </div>
