@@ -9,13 +9,18 @@ import { DailyWorkout } from '@/components/dashboard/DailyWorkout';
 import { RunningNews } from '@/components/dashboard/RunningNews';
 import { DressMyRunSection } from '@/components/dashboard/DressMyRun';
 import { useUser, useFirestore, useDoc, setDocumentNonBlocking } from '@/firebase';
-import type { User as AppUser, TrainingPlan as AppTrainingPlan, DashboardCache as AppDashboardCache } from '@/lib/firebase-schemas';
+import type { User as AppUser, TrainingPlan as AppTrainingPlan, DashboardCache } from '@/lib/firebase-schemas';
+import { generateDailyWorkout as generateDailyWorkoutFlow, suggestWorkoutWhenNoPlan } from '@/ai/flows';
+import { generateDashboardContent, type GenerateDashboardInput, type GenerateDashboardOutput, type DailyForecastData } from '@/ai/flows/generate-dashboard-content';
+import { fetchDetailedWeather } from '@/app/actions/weatherActions';
 import { doc, DocumentReference } from 'firebase/firestore';
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Info } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user: authUser, isUserLoading: isAuthUserLoading } = useUser();
@@ -38,86 +43,160 @@ export default function DashboardPage() {
   
   const dashboardCacheDocRef = useMemo(() => {
     if (!firestore || !authUser?.uid) return null;
-    return doc(firestore, 'dashboardCache', authUser.uid) as DocumentReference<AppDashboardCache>;
+    return doc(firestore, 'dashboardCache', authUser.uid) as DocumentReference<DashboardCache>;
   }, [firestore, authUser]);
-  const { data: cachedDashboardData, isLoading: isCacheLoading, error: cacheError } = useDoc<AppDashboardCache>(dashboardCacheDocRef);
+  const { data: cachedDashboardData, isLoading: isCacheLoading, error: cacheError } = useDoc<DashboardCache>(dashboardCacheDocRef);
 
-  const [dashboardContent, setDashboardContent] = useState<Partial<AppDashboardCache & { dressMyRunSuggestion: any }>>({});
-  const [isGeneratingCache, setIsGeneratingCache] = useState(false);
+  const [dashboardContent, setDashboardContent] = useState<GenerateDashboardOutput | null>(null);
+  const [isGeneratingDashboard, setIsGeneratingDashboard] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
 
-  const generateAndCacheDashboard = useCallback(async (
-      currentMotivationalGreeting: string,
-      currentWeatherInfo: AppDashboardCache['weatherInfo'],
-      currentDailyWorkout: string,
-      currentRunningNews: string[],
-      currentDressMyRunSuggestion: any
-    ) => {
-    if (!authUser?.uid || !firestore || !dashboardCacheDocRef) return;
+
+  const generateAndCacheDashboardContent = useCallback(async () => {
+    if (!authUser?.uid || !userData || !firestore || !dashboardCacheDocRef) {
+      console.log("Missing critical data for dashboard generation, skipping.");
+      return;
+    }
     
-    setIsGeneratingCache(true);
-    const newCache: AppDashboardCache & { dressMyRunSuggestion: any } = {
-      id: authUser.uid,
-      userId: authUser.uid,
-      cacheDate: todayISO,
-      motivationalGreeting: currentMotivationalGreeting,
-      weatherInfo: currentWeatherInfo,
-      dailyWorkout: currentDailyWorkout,
-      runningNews: currentRunningNews,
-      dressMyRunSuggestion: currentDressMyRunSuggestion,
-    };
-    setDocumentNonBlocking(dashboardCacheDocRef, newCache, { merge: true });
-    setDashboardContent(newCache); 
-    setIsGeneratingCache(false);
-  }, [authUser?.uid, firestore, dashboardCacheDocRef, todayISO]);
+    setIsGeneratingDashboard(true);
+    setPageError(null);
+    console.log("Starting dashboard content generation...");
+
+    try {
+      // 1. Generate Today's Workout String
+      let todaysWorkoutStr = "Rest day or choose your own activity.";
+      const userProfileStringForWorkout = `Fitness Level: ${userData.profile.fitnessLevel}, Experience: ${userData.profile.runningExperience}, Goal: ${userData.profile.goal}`;
+      if (trainingPlanData && new Date(trainingPlanData.endDate) >= new Date(todayISO)) {
+        const workoutResult = await generateDailyWorkoutFlow({
+          userProfile: userProfileStringForWorkout,
+          trainingSchedule: trainingPlanData.rawPlanText,
+          date: todayISO,
+        });
+        todaysWorkoutStr = workoutResult.workoutPlan;
+      } else {
+        const suggestionResult = await suggestWorkoutWhenNoPlan({
+          fitnessLevel: userData.profile.fitnessLevel,
+          workoutPreferences: userData.profile.preferredWorkoutTypes || 'running',
+          availableTime: userData.profile.availableTime || '30-60 minutes',
+          equipmentAvailable: userData.profile.equipmentAvailable || 'None',
+        });
+        todaysWorkoutStr = suggestionResult.workoutSuggestion;
+      }
+      console.log("Today's workout string generated:", todaysWorkoutStr);
+
+      // 2. Fetch Detailed Weather
+      let detailedWeatherData: DailyForecastData | { error: string; locationName?: string };
+      if (userData.profile.locationCity) {
+        detailedWeatherData = await fetchDetailedWeather(userData.profile.locationCity, userData.profile.weatherUnit);
+      } else {
+        detailedWeatherData = { error: "Location not set in profile.", locationName: "Unknown" };
+      }
+      console.log("Detailed weather fetched:", detailedWeatherData);
+      
+      // 3. Prepare input for the main dashboard content flow
+      const dashboardFlowInput: GenerateDashboardInput = {
+        userId: authUser.uid,
+        userName: userData.firstName || 'Runner',
+        locationCity: userData.profile.locationCity || 'Not set',
+        runningLevel: userData.profile.fitnessLevel,
+        goal: userData.profile.goal,
+        todaysWorkout: todaysWorkoutStr,
+        detailedWeather: detailedWeatherData,
+        weatherUnit: userData.profile.weatherUnit,
+        newsSearchCategories: userData.profile.newsSearchCategories,
+      };
+
+      // 4. Call the main Genkit flow
+      console.log("Calling generateDashboardContent flow with input:", dashboardFlowInput);
+      const generatedContent = await generateDashboardContent(dashboardFlowInput);
+      console.log("Dashboard content generated by flow:", generatedContent);
+
+      setDashboardContent(generatedContent);
+
+      // 5. Cache the new content
+      const newCacheData: DashboardCache = {
+        id: authUser.uid,
+        userId: authUser.uid,
+        cacheDate: todayISO,
+        greeting: generatedContent.greeting,
+        weatherSummary: generatedContent.weatherSummary,
+        workoutForDisplay: generatedContent.workoutForDisplay,
+        topStories: generatedContent.topStories,
+        planEndNotification: generatedContent.planEndNotification,
+        dressMyRunSuggestion: generatedContent.dressMyRunSuggestion,
+        cachedInputs: { // Cache relevant inputs for staleness check
+            locationCity: userData.profile.locationCity,
+            weatherUnit: userData.profile.weatherUnit,
+            newsSearchCategories: userData.profile.newsSearchCategories,
+        }
+      };
+      setDocumentNonBlocking(dashboardCacheDocRef, newCacheData, { merge: true });
+      console.log("New dashboard content cached.");
+
+    } catch (error) {
+      console.error("Error generating dashboard content:", error);
+      setPageError(`Failed to generate dashboard. ${error instanceof Error ? error.message : 'Please try again.'}`);
+      // Set a minimal fallback content so the page doesn't entirely break
+      setDashboardContent({
+        greeting: `Hello ${userData.firstName || 'Runner'}! We had trouble loading your dashboard.`,
+        weatherSummary: "Weather data unavailable.",
+        workoutForDisplay: "Workout data unavailable.",
+        topStories: [],
+        dressMyRunSuggestion: [],
+      });
+    } finally {
+      setIsGeneratingDashboard(false);
+    }
+  }, [authUser?.uid, userData, firestore, dashboardCacheDocRef, trainingPlanData, todayISO]);
 
 
   useEffect(() => {
-    const profileSettingsChanged = userData && cachedDashboardData && 
-      (cachedDashboardData.weatherInfo?.locationCity !== userData.profile.locationCity || 
-       cachedDashboardData.weatherInfo?.weatherUnit !== userData.profile.weatherUnit);
+    if (isAuthUserLoading || isUserDataLoading || isCacheLoading) {
+      return; 
+    }
+
+    if (!userData && !isAuthUserLoading) { // User exists in auth but no Firestore doc yet
+        // This state is handled by the return block below
+        return;
+    }
+    
+    if (userError || cacheError) {
+        setPageError(userError?.message || cacheError?.message || "Error loading page data.");
+        return;
+    }
+
+    const profileSettingsChanged = userData && cachedDashboardData?.cachedInputs &&
+      (cachedDashboardData.cachedInputs.locationCity !== userData.profile.locationCity ||
+       cachedDashboardData.cachedInputs.weatherUnit !== userData.profile.weatherUnit ||
+       JSON.stringify(cachedDashboardData.cachedInputs.newsSearchCategories?.sort()) !== JSON.stringify(userData.profile.newsSearchCategories?.sort())
+      );
 
     if (cachedDashboardData && cachedDashboardData.cacheDate === todayISO && !profileSettingsChanged) {
-      setDashboardContent(cachedDashboardData as AppDashboardCache & { dressMyRunSuggestion: any });
-    } else if (!isCacheLoading && authUser && userData && !cacheError) {
-       setDashboardContent({
-           motivationalGreeting: undefined,
-           weatherInfo: undefined,
-           dailyWorkout: undefined,
-           runningNews: undefined,
-           dressMyRunSuggestion: undefined,
-       });
+      console.log("Using cached dashboard data for today.");
+      setDashboardContent({
+        greeting: cachedDashboardData.greeting,
+        weatherSummary: cachedDashboardData.weatherSummary,
+        workoutForDisplay: cachedDashboardData.workoutForDisplay,
+        topStories: cachedDashboardData.topStories,
+        planEndNotification: cachedDashboardData.planEndNotification,
+        dressMyRunSuggestion: cachedDashboardData.dressMyRunSuggestion,
+      });
+    } else if (authUser && userData && (!isTrainingPlanLoading || trainingPlanData === undefined)) { // Ensure training plan status is settled
+      console.log(profileSettingsChanged ? "Profile settings changed, regenerating." : "Cache stale or missing, regenerating dashboard.");
+      generateAndCacheDashboardContent();
     }
-  }, [cachedDashboardData, todayISO, isCacheLoading, authUser, userData, cacheError]);
-
-  const handleComponentGenerated = useCallback((type: keyof (AppDashboardCache & { dressMyRunSuggestion: any }), value: any) => {
-    setDashboardContent(prev => {
-        const newState = {...prev, [type]: value };
-        const profileSettingsChanged = userData && cachedDashboardData && 
-            (cachedDashboardData.weatherInfo?.locationCity !== userData.profile.locationCity || 
-             cachedDashboardData.weatherInfo?.weatherUnit !== userData.profile.weatherUnit);
-
-        if (
-            newState.motivationalGreeting !== undefined &&
-            newState.weatherInfo !== undefined &&
-            newState.dailyWorkout !== undefined &&
-            newState.runningNews !== undefined && 
-            newState.dressMyRunSuggestion !== undefined &&
-            (!cachedDashboardData || cachedDashboardData.cacheDate !== todayISO || profileSettingsChanged) 
-        ) {
-            generateAndCacheDashboard(
-                newState.motivationalGreeting as string,
-                newState.weatherInfo as AppDashboardCache['weatherInfo'],
-                newState.dailyWorkout as string,
-                newState.runningNews as string[],
-                newState.dressMyRunSuggestion
-            );
-        }
-        return newState;
-    });
-  }, [cachedDashboardData, todayISO, generateAndCacheDashboard, userData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isAuthUserLoading, isUserDataLoading, isCacheLoading, 
+    authUser, userData, trainingPlanData, isTrainingPlanLoading, // Added trainingPlanData & its loading state
+    cachedDashboardData, 
+    todayISO, 
+    generateAndCacheDashboardContent, // generateAndCacheDashboardContent is now stable
+    userError, cacheError
+  ]);
 
 
-  if (isAuthUserLoading || isUserDataLoading || (isCacheLoading && !cachedDashboardData)) {
+  if (isAuthUserLoading || (authUser && isUserDataLoading && !userData) || (isCacheLoading && !cachedDashboardData && !isGeneratingDashboard && !dashboardContent)) {
     return (
       <AppLayout>
         <div className="flex h-[calc(100vh-10rem)] w-full items-center justify-center">
@@ -126,16 +205,8 @@ export default function DashboardPage() {
       </AppLayout>
     );
   }
-
-  if (userError) {
-    return (
-      <AppLayout>
-        <div className="text-destructive p-4">Error loading user data: {userError.message}. Please try refreshing.</div>
-      </AppLayout>
-    );
-  }
   
-  if (!userData && !isUserDataLoading) {
+  if (!userData && !isUserDataLoading && authUser) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4">
@@ -147,51 +218,63 @@ export default function DashboardPage() {
     );
   }
 
+  if (pageError && !isGeneratingDashboard) {
+    return (
+        <AppLayout>
+            <Alert variant="destructive" className="mb-6">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Dashboard Error</AlertTitle>
+              <AlertDescription>{pageError} Please try refreshing the page or check your profile settings.</AlertDescription>
+            </Alert>
+        </AppLayout>
+    );
+  }
+
+  if (isGeneratingDashboard || !dashboardContent) {
+     return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Generating your personalized dashboard...</p>
+        </div>
+      </AppLayout>
+    );
+  }
+
+
   return (
     <AuthGuard>
       <AppLayout>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="md:col-span-2">
             <MotivationalGreeting 
-              user={userData} 
-              cachedGreeting={dashboardContent.motivationalGreeting}
-              onGreetingGenerated={(g) => handleComponentGenerated('motivationalGreeting', g)}
+              greeting={dashboardContent.greeting}
+              userName={userData?.firstName}
             />
           </div>
           
-          <div> {/* WeatherForecast will take the first column on md+ */}
+          <div>
             <WeatherForecast 
-              locationCity={userData?.profile?.locationCity}
-              weatherUnit={userData?.profile?.weatherUnit}
-              cachedWeather={dashboardContent.weatherInfo}
-              onWeatherGenerated={(w) => handleComponentGenerated('weatherInfo', w)}
+              weatherSummary={dashboardContent.weatherSummary}
             />
           </div>
 
-          <div> {/* DailyWorkout will take the second column on md+ */}
+          <div>
              <DailyWorkout
-                user={userData}
-                trainingPlan={trainingPlanData}
-                isLoadingPlan={isTrainingPlanLoading}
-                cachedWorkout={dashboardContent.dailyWorkout}
-                onWorkoutGenerated={(w) => handleComponentGenerated('dailyWorkout', w)}
+                workoutDescription={dashboardContent.workoutForDisplay}
               />
           </div>
         
-          {dashboardContent.weatherInfo && ( // Keep this conditional for DressMyRun
-            <div className="md:col-span-2">
-              <DressMyRunSection 
-                suggestion={dashboardContent.dressMyRunSuggestion}
-                // You might need an onDressMyRunGenerated callback here if it's async
-                // and update handleComponentGenerated and generateAndCacheDashboard accordingly
-              />
-            </div>
-          )}
+          <div className="md:col-span-2">
+            <DressMyRunSection 
+              suggestion={dashboardContent.dressMyRunSuggestion}
+            />
+          </div>
           
           <div className="md:col-span-2">
             <RunningNews 
-              cachedNews={dashboardContent.runningNews}
-              onNewsGenerated={(n) => handleComponentGenerated('runningNews', n)}
+              newsItems={dashboardContent.topStories}
+              planNotification={dashboardContent.planEndNotification}
             />
           </div>
         </div>
