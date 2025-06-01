@@ -7,6 +7,7 @@ import { MotivationalGreeting } from '@/components/dashboard/MotivationalGreetin
 import { WeatherForecast } from '@/components/dashboard/WeatherForecast';
 import { DailyWorkout } from '@/components/dashboard/DailyWorkout';
 import { RunningNews } from '@/components/dashboard/RunningNews';
+import { DressMyRunSection } from '@/components/dashboard/DressMyRun';
 import { useUser, useFirestore, useDoc, setDocumentNonBlocking } from '@/firebase';
 import type { User as AppUser, TrainingPlan as AppTrainingPlan, DashboardCache as AppDashboardCache } from '@/lib/firebase-schemas';
 import { doc, DocumentReference } from 'firebase/firestore';
@@ -41,26 +42,28 @@ export default function DashboardPage() {
   }, [firestore, authUser]);
   const { data: cachedDashboardData, isLoading: isCacheLoading, error: cacheError } = useDoc<AppDashboardCache>(dashboardCacheDocRef);
 
-  const [dashboardContent, setDashboardContent] = useState<Partial<AppDashboardCache>>({});
+  const [dashboardContent, setDashboardContent] = useState<Partial<AppDashboardCache & { dressMyRunSuggestion: any }>>({});
   const [isGeneratingCache, setIsGeneratingCache] = useState(false);
 
   const generateAndCacheDashboard = useCallback(async (
       currentMotivationalGreeting: string,
       currentWeatherInfo: AppDashboardCache['weatherInfo'],
       currentDailyWorkout: string,
-      currentRunningNews: string[]
+      currentRunningNews: string[],
+      currentDressMyRunSuggestion: any
     ) => {
     if (!authUser?.uid || !firestore || !dashboardCacheDocRef) return;
     
     setIsGeneratingCache(true);
-    const newCache: AppDashboardCache = {
+    const newCache: AppDashboardCache & { dressMyRunSuggestion: any } = {
       id: authUser.uid,
       userId: authUser.uid,
       cacheDate: todayISO,
       motivationalGreeting: currentMotivationalGreeting,
-      weatherInfo: currentWeatherInfo, // Includes locationCity and weatherUnit
+      weatherInfo: currentWeatherInfo,
       dailyWorkout: currentDailyWorkout,
       runningNews: currentRunningNews,
+      dressMyRunSuggestion: currentDressMyRunSuggestion,
     };
     setDocumentNonBlocking(dashboardCacheDocRef, newCache, { merge: true });
     setDashboardContent(newCache); 
@@ -69,24 +72,24 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    // Check if cache needs update due to profile changes relevant to dashboard
     const profileSettingsChanged = userData && cachedDashboardData && 
       (cachedDashboardData.weatherInfo?.locationCity !== userData.profile.locationCity || 
        cachedDashboardData.weatherInfo?.weatherUnit !== userData.profile.weatherUnit);
 
     if (cachedDashboardData && cachedDashboardData.cacheDate === todayISO && !profileSettingsChanged) {
-      setDashboardContent(cachedDashboardData);
+      setDashboardContent(cachedDashboardData as AppDashboardCache & { dressMyRunSuggestion: any });
     } else if (!isCacheLoading && authUser && userData && !cacheError) {
        setDashboardContent({
            motivationalGreeting: undefined,
            weatherInfo: undefined,
            dailyWorkout: undefined,
            runningNews: undefined,
+           dressMyRunSuggestion: undefined,
        });
     }
-  }, [cachedDashboardData, todayISO, isCacheLoading, authUser, userData, cacheError, generateAndCacheDashboard]);
+  }, [cachedDashboardData, todayISO, isCacheLoading, authUser, userData, cacheError]);
 
-  const handleComponentGenerated = useCallback((type: keyof AppDashboardCache, value: any) => {
+  const handleComponentGenerated = useCallback((type: keyof (AppDashboardCache & { dressMyRunSuggestion: any }), value: any) => {
     setDashboardContent(prev => {
         const newState = {...prev, [type]: value };
         const profileSettingsChanged = userData && cachedDashboardData && 
@@ -97,14 +100,16 @@ export default function DashboardPage() {
             newState.motivationalGreeting !== undefined &&
             newState.weatherInfo !== undefined &&
             newState.dailyWorkout !== undefined &&
-            newState.runningNews !== undefined &&
+            newState.runningNews !== undefined && 
+            newState.dressMyRunSuggestion !== undefined &&
             (!cachedDashboardData || cachedDashboardData.cacheDate !== todayISO || profileSettingsChanged) 
         ) {
             generateAndCacheDashboard(
                 newState.motivationalGreeting as string,
                 newState.weatherInfo as AppDashboardCache['weatherInfo'],
                 newState.dailyWorkout as string,
-                newState.runningNews as string[]
+                newState.runningNews as string[],
+                newState.dressMyRunSuggestion
             );
         }
         return newState;
@@ -145,15 +150,16 @@ export default function DashboardPage() {
   return (
     <AuthGuard>
       <AppLayout>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <div className="lg:col-span-2 xl:col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-2">
             <MotivationalGreeting 
               user={userData} 
               cachedGreeting={dashboardContent.motivationalGreeting}
               onGreetingGenerated={(g) => handleComponentGenerated('motivationalGreeting', g)}
             />
           </div>
-          <div className="lg:col-span-1 xl:col-span-2">
+          
+          <div> {/* WeatherForecast will take the first column on md+ */}
             <WeatherForecast 
               locationCity={userData?.profile?.locationCity}
               weatherUnit={userData?.profile?.weatherUnit}
@@ -161,7 +167,8 @@ export default function DashboardPage() {
               onWeatherGenerated={(w) => handleComponentGenerated('weatherInfo', w)}
             />
           </div>
-          <div className="md:col-span-2 lg:col-span-3 xl:col-span-4">
+
+          <div> {/* DailyWorkout will take the second column on md+ */}
              <DailyWorkout
                 user={userData}
                 trainingPlan={trainingPlanData}
@@ -170,7 +177,18 @@ export default function DashboardPage() {
                 onWorkoutGenerated={(w) => handleComponentGenerated('dailyWorkout', w)}
               />
           </div>
-          <div className="md:col-span-2 lg:col-span-3 xl:col-span-4">
+        
+          {dashboardContent.weatherInfo && ( // Keep this conditional for DressMyRun
+            <div className="md:col-span-2">
+              <DressMyRunSection 
+                suggestion={dashboardContent.dressMyRunSuggestion}
+                // You might need an onDressMyRunGenerated callback here if it's async
+                // and update handleComponentGenerated and generateAndCacheDashboard accordingly
+              />
+            </div>
+          )}
+          
+          <div className="md:col-span-2">
             <RunningNews 
               cachedNews={dashboardContent.runningNews}
               onNewsGenerated={(n) => handleComponentGenerated('runningNews', n)}
@@ -181,4 +199,3 @@ export default function DashboardPage() {
     </AuthGuard>
   );
 }
-

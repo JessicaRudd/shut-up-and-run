@@ -88,12 +88,13 @@ const prompt = ai.definePrompt({
   IMPORTANT: Each day's entry MUST start with the date in YYYY-MM-DD format, followed by a colon and a space (e.g., "2024-08-01: Easy Run - 30 minutes").
   Subsequent lines for the same day (e.g., details, notes) should not have a date prefix but should be clearly associated with that day's entry.
   Include:
+  - Week of training and focus (e.g. Week 1. Build, Week 3. De-load, etc)
   - Type of workout (e.g., easy run, tempo run, interval training, long run, rest)
   - Distance or duration of the workout
   - Pace or intensity of the workout
   - Any additional instructions or notes
 
-  The training plan should be formatted for readability (e.g. using markdown-like list for workout details under each date).
+  The training plan should be formatted for readability.
   Organize the plan by weeks (e.g., "Week 1", "Week 2", etc.) as main headers if appropriate for the plan length.
   Ensure the plan is tailored to the user's running level, experience, goal, and the number of days per week they can train.
   {{#if preferredLongRunDay}}
