@@ -181,8 +181,8 @@ const generateDashboardContentFlow = ai.defineFlow(
   async (input: GenerateDashboardInput): Promise<GenerateDashboardOutput> => {
     console.log("[generateDashboardContentFlow] Input:", JSON.stringify(input, null, 2));
 
-    // Directly call the prompt with the input
-    const { output, errors } = await dashboardPrompt.generate({ input });
+    // Call the prompt directly
+    const { output, errors } = await dashboardPrompt(input);
 
     if (errors && errors.length > 0) {
         console.error("[generateDashboardContentFlow] Errors during prompt generation:", errors);
@@ -294,5 +294,3 @@ const generateDashboardContentFlow = ai.defineFlow(
     return output;
   }
 );
-
-    
