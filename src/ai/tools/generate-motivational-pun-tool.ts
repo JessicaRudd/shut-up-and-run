@@ -9,12 +9,12 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
-export const GenerateMotivationalPunToolInputSchema = z.object({
+const GenerateMotivationalPunToolInputSchema = z.object({
   userName: z.string().describe('The name of the user for a personalized greeting.'),
 });
 export type GenerateMotivationalPunToolInput = z.infer<typeof GenerateMotivationalPunToolInputSchema>;
 
-export const GenerateMotivationalPunToolOutputSchema = z.object({
+const GenerateMotivationalPunToolOutputSchema = z.object({
   greeting: z.string().describe('A motivational greeting including a running-related pun.'),
 });
 export type GenerateMotivationalPunToolOutput = z.infer<typeof GenerateMotivationalPunToolOutputSchema>;

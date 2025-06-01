@@ -16,7 +16,7 @@ const newsSearchCategoryValues: [NewsSearchCategory, ...NewsSearchCategory[]] = 
   "running_apparel", "marathon_majors", "nutrition", "training"
 ];
 
-export const FetchGoogleRunningNewsToolInputSchema = z.object({
+const FetchGoogleRunningNewsToolInputSchema = z.object({
   userLocation: z.string().optional().describe('The user location (e.g., city, country) to help tailor news search. Can be an empty string if not available.'),
   searchCategories: z.array(z.enum(newsSearchCategoryValues)).optional().describe('An array of preferred news categories. If empty or undefined, general running news will be fetched.'),
 });
@@ -30,7 +30,7 @@ const NewsArticleSchema = z.object({
 });
 export type NewsArticle = z.infer<typeof NewsArticleSchema>;
 
-export const FetchGoogleRunningNewsToolOutputSchema = z.object({
+const FetchGoogleRunningNewsToolOutputSchema = z.object({
   articles: z.array(NewsArticleSchema).describe('An array of fetched news articles. Can be empty if no relevant news is found.'),
   error: z.string().optional().describe('An error message if news fetching failed. Undefined if successful.'),
 });
@@ -98,6 +98,3 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
     return { articles: mockArticles.slice(0, 7) }; // Return up to 7 mock articles
   }
 );
-
-// Add to dev.ts if not already (or create a new tools/index.ts and import there)
-// import './fetch-google-running-news-tool';
