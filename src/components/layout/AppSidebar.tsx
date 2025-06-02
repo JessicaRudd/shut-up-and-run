@@ -3,7 +3,8 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import Script from 'next/script'; // Added for BMC button
+// Removed Script import as it's no longer used for BMC button
+import Image from 'next/image'; // For the new BMC image
 import {
   LayoutDashboard,
   User,
@@ -11,7 +12,7 @@ import {
   MessageSquareText,
   LogOut,
   Footprints,
-  Coffee, // Added for BMC link
+  Coffee, 
 } from 'lucide-react';
 import {
   Sidebar,
@@ -88,22 +89,19 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
 
-          {/* Buy Me A Coffee Button - visible when sidebar is expanded */}
+          {/* Buy Me A Coffee Image Link - visible when sidebar is expanded */}
           <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
             <div className="flex justify-center w-full px-1 py-1">
-              <Script
-                src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js"
-                data-name="bmc-button"
-                data-slug="h9aq9muuYz"
-                data-color="#FFDD00"
-                data-emoji=""
-                data-font="Cookie"
-                data-text="Buy me a coffee"
-                data-outline-color="#000000"
-                data-font-color="#000000"
-                data-coffee-color="#ffffff"
-                strategy="afterInteractive"
-              />
+              <a href="https://www.buymeacoffee.com/h9aq9muuYz" target="_blank" rel="noopener noreferrer">
+                <Image 
+                  src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" 
+                  alt="Buy Me A Coffee" 
+                  width={217} 
+                  height={60}
+                  style={{ height: '60px', width: '217px' }} // Keep inline styles as they were in the img tag
+                  priority // Preload the image if it's important for LCP
+                />
+              </a>
             </div>
           </SidebarMenuItem>
 
