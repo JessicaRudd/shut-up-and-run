@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -53,10 +54,23 @@ export function LoginForm() {
     } catch (error) {
       const authError = error as AuthError;
       console.error('Login failed:', authError);
+
+      let description = 'An unexpected error occurred. Please try again.';
+      if (authError.code === 'auth/user-not-found') {
+        description = 'No account found with this email. Please check your email or sign up.';
+      } else if (authError.code === 'auth/wrong-password') {
+        description = 'Incorrect password. Please try again.';
+      } else if (authError.code === 'auth/invalid-email') {
+        description = 'The email address is not valid. Please check and try again.';
+      } else if (authError.message) {
+        // Fallback to Firebase's message if it's not one of the common ones handled above
+        description = authError.message;
+      }
+
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: authError.message || 'An unexpected error occurred.',
+        description: description,
       });
     } finally {
       setIsLoading(false);
