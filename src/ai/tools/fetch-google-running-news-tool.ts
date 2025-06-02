@@ -1,7 +1,7 @@
 // src/ai/tools/fetch-google-running-news-tool.ts
 'use server';
 /**
- * @fileOverview A Genkit tool to fetch running news using an LLM.
+ * @fileOverview A Genkit tool to fetch running news using the Google Custom Search API.
  *
  * - fetchGoogleRunningNewsTool - The Genkit tool definition.
  */
@@ -10,7 +10,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { NewsSearchCategory } from '@/lib/types';
 
-// Define the possible enum values for news search categories
 const newsSearchCategoryValues: [NewsSearchCategory, ...NewsSearchCategory[]] = [
   "geographic_area", "track_road_trail", "running_tech",
   "running_apparel", "marathon_majors", "nutrition", "training"
@@ -39,65 +38,80 @@ export type FetchGoogleRunningNewsToolOutput = z.infer<typeof FetchGoogleRunning
 export const fetchGoogleRunningNewsTool = ai.defineTool(
   {
     name: 'fetchGoogleRunningNewsTool',
-    description: 'Generates recent running-related news articles using AI. Can be tailored by location and categories if provided.',
+    description: 'Fetches recent running-related news articles using the Google Custom Search API. Can be tailored by location and categories if provided.',
     inputSchema: FetchGoogleRunningNewsToolInputSchema,
     outputSchema: FetchGoogleRunningNewsToolOutputSchema,
   },
   async (input: FetchGoogleRunningNewsToolInput): Promise<FetchGoogleRunningNewsToolOutput> => {
+    const apiKey = process.env.GOOGLE_CUSTOM_SEARCH_API_KEY;
+    const searchEngineId = process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID;
+
+    if (!apiKey || !searchEngineId) {
+      console.error("[fetchGoogleRunningNewsTool] Google Custom Search API Key or Search Engine ID is missing in .env.local.");
+      return { articles: [], error: "News service is not configured. API Key or Search Engine ID missing." };
+    }
+
     const { userLocation, searchCategories } = input;
-    let searchQuery = "recent top running news";
+    let query = "running news";
+
     if (searchCategories && searchCategories.length > 0) {
-      searchQuery += ` focusing on ${searchCategories.join(", ")}`;
+      const categoryQuery = searchCategories
+        .map(cat => cat.replace(/_/g, ' ')) // Replace underscores for better search terms
+        .join(" OR "); // Use OR for multiple categories to broaden search
+      query += ` (${categoryQuery})`;
     }
+
     if (userLocation && userLocation.trim() !== "" && userLocation.toLowerCase() !== "not set") {
-      searchQuery += ` relevant to ${userLocation}`;
+      query += ` in ${userLocation}`;
     }
 
-    const newsPrompt = `You are a news aggregation assistant. Provide up to 5 recent and relevant running news articles based on the following interest: "${searchQuery}".
-For each article, structure it with:
-- title: A concise and engaging headline.
-- link: A plausible, generic placeholder URL (e.g., https://example-news.com/story-slug).
-- snippet: A brief 1-2 sentence summary of what the article is about.
-- source: A plausible source name (e.g., "Running Today Magazine", "Global Athletics News").
-
-Return *only* a JSON array of these article objects. If no relevant articles are found, return an empty array.
-Example of a single article object:
-{ "title": "Marathon Season Kicks Off", "link": "https://example-news.com/marathon-season", "snippet": "Runners worldwide are preparing as the spring marathon season begins, with major events scheduled in several key cities.", "source": "World Running Digest" }
-`;
+    const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=5&sort=date`; // Get top 5, sort by date if possible (CSE feature)
 
     try {
-      const ExpectedLLMOutputSchema = z.array(NewsArticleSchema);
-      const { output: generatedArticles, errors: generationErrors } = await ai.generate({
-        prompt: newsPrompt,
-        output: {
-          format: 'json',
-          schema: ExpectedLLMOutputSchema
-        },
-        config: { temperature: 0.4 } // Slightly lower temperature for more factual-sounding news
-      });
+      const response = await fetch(apiUrl);
+      const responseData = await response.json();
 
-      if (generationErrors && generationErrors.length > 0) {
-        console.error("[fetchGoogleRunningNewsTool] LLM generation errors:", generationErrors);
-        const errorMessages = generationErrors.map(e => typeof e === 'string' ? e : (e as Error).message || 'Unknown generation error').join('; ');
-        return { articles: [], error: `AI generation failed: ${errorMessages}` };
+      if (!response.ok) {
+        const apiError = responseData?.error?.message || `HTTP error! status: ${response.status}`;
+        console.error(`[fetchGoogleRunningNewsTool] API Error: ${response.status}`, responseData);
+        return { articles: [], error: `Error fetching news from Google: ${apiError}` };
+      }
+      
+      if (responseData.error) {
+          console.error("[fetchGoogleRunningNewsTool] Google Search API returned an error in JSON payload:", responseData.error);
+          return { articles: [], error: `Google Search API error: ${responseData.error.message || 'Unknown error from API.'}` };
       }
 
-      if (generatedArticles && Array.isArray(generatedArticles)) {
-        const validatedArticles = generatedArticles.filter(
-          article => article.title && article.link && article.snippet && article.source
-        ).map(article => ({
-            ...article,
-            link: (article.link && (article.link.startsWith('http://') || article.link.startsWith('https://'))) ? article.link : `https://example-news.com/article/${encodeURIComponent(article.title.substring(0,30).replace(/\s+/g, '-').toLowerCase())}`
-        })).slice(0, 5); // Ensure max 5
-        return { articles: validatedArticles };
-      } else {
-        console.warn("[fetchGoogleRunningNewsTool] LLM did not return articles in the expected array format or output was null. Raw output:", generatedArticles);
-        return { articles: [], error: "AI returned no articles or unexpected format." };
+      if (!responseData.items || responseData.items.length === 0) {
+        console.log("[fetchGoogleRunningNewsTool] No articles found for query:", query);
+        return { articles: [] }; // No articles found
       }
-    } catch (error) { // Catch errors from ai.generate call itself (e.g., network, service unavailable)
-      console.error("[fetchGoogleRunningNewsTool] Exception during LLM call:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      return { articles: [], error: `Error fetching news from AI: ${errorMessage}` };
+
+      const articles: NewsArticle[] = responseData.items.map((item: any) => {
+        let source = "Unknown Source";
+        if (item.pagemap?.metatags?.[0]?.['og:site_name']) {
+          source = item.pagemap.metatags[0]['og:site_name'];
+        } else if (item.displayLink) {
+          source = item.displayLink;
+        } else if (item.link) {
+          try {
+            source = new URL(item.link).hostname.replace(/^www\./, '');
+          } catch { /* ignore invalid URL for hostname extraction */ }
+        }
+        
+        return {
+          title: item.title || "No title",
+          link: item.link || "#",
+          snippet: item.snippet || "No snippet available.",
+          source: source,
+        };
+      }).filter((article: NewsArticle) => article.link !== "#"); // Filter out articles with no link
+
+      return { articles };
+    } catch (error) {
+      console.error("[fetchGoogleRunningNewsTool] Exception during API call:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+      return { articles: [], error: `Error processing news request: ${errorMessage}` };
     }
   }
 );
