@@ -94,7 +94,7 @@ export function AppSidebar() {
             <div className="flex justify-center w-full px-1 py-1">
               <a href="https://www.buymeacoffee.com/h9aq9muuYz" target="_blank" rel="noopener noreferrer">
                 <Image 
-                  src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" 
+                  src="https://storage.googleapis.com/idx-assets/stardust_952008190_0000000000.png" 
                   alt="Buy Me A Coffee" 
                   width={217} 
                   height={60}
