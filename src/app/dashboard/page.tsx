@@ -122,7 +122,7 @@ export default function DashboardPage() {
         weatherSummary: generatedContent.weatherSummary,
         workoutForDisplay: generatedContent.workoutForDisplay,
         topStories: generatedContent.topStories,
-        planEndNotification: generatedContent.planEndNotification,
+        planEndNotification: generatedContent.planEndNotification ?? null, // Ensure null for Firestore
         dressMyRunSuggestion: generatedContent.dressMyRunSuggestion,
         cachedInputs: { // Cache relevant inputs for staleness check
             locationCity: userData.profile.locationCity,
@@ -143,6 +143,7 @@ export default function DashboardPage() {
         workoutForDisplay: "Workout data unavailable.",
         topStories: [],
         dressMyRunSuggestion: [],
+        planEndNotification: null, // Ensure fallback is also Firestore compatible
       });
     } finally {
       setIsGeneratingDashboard(false);
@@ -178,7 +179,7 @@ export default function DashboardPage() {
         weatherSummary: cachedDashboardData.weatherSummary,
         workoutForDisplay: cachedDashboardData.workoutForDisplay,
         topStories: cachedDashboardData.topStories,
-        planEndNotification: cachedDashboardData.planEndNotification,
+        planEndNotification: cachedDashboardData.planEndNotification ?? null,
         dressMyRunSuggestion: cachedDashboardData.dressMyRunSuggestion,
       });
     } else if (authUser && userData && (!isTrainingPlanLoading || trainingPlanData === undefined)) { // Ensure training plan status is settled
@@ -274,7 +275,7 @@ export default function DashboardPage() {
           <div className="md:col-span-2">
             <RunningNews 
               newsItems={dashboardContent.topStories}
-              planNotification={dashboardContent.planEndNotification}
+              planNotification={dashboardContent.planEndNotification ?? undefined} // Pass undefined to component if null
             />
           </div>
         </div>

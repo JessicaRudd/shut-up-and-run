@@ -229,7 +229,7 @@ const generateDashboardContentFlow = ai.defineFlow(
         weatherSummary: fallbackWeatherSummary,
         workoutForDisplay: fallbackWorkout,
         topStories: [], 
-        planEndNotification: undefined,
+        planEndNotification: null, // Use null instead of undefined for Firestore compatibility
         dressMyRunSuggestion: [],
       };
       console.log("[generateDashboardContentFlow] Returning fallback due to no AI output:", fallbackResult);
