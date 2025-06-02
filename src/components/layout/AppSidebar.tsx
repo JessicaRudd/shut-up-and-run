@@ -94,10 +94,10 @@ export function AppSidebar() {
             <div className="flex justify-center w-full px-1 py-1">
               <a href="https://www.buymeacoffee.com/h9aq9muuYz" target="_blank" rel="noopener noreferrer">
                 <Image 
-                  src="https://storage.googleapis.com/idx-assets/stardust_952008190_0000000000.png" 
+                  src="/images/orange-button.png" 
                   alt="Buy Me A Coffee" 
-                  width={217} 
-                  height={60}
+                  width={190} 
+                  height={47}
                   style={{ height: '60px', width: '217px' }} // Keep inline styles as they were in the img tag
                   priority // Preload the image if it's important for LCP
                 />

@@ -1,7 +1,7 @@
 // src/ai/tools/fetch-google-running-news-tool.ts
 'use server';
 /**
- * @fileOverview A Genkit tool to fetch running news.
+ * @fileOverview A Genkit tool to fetch running news using an LLM.
  *
  * - fetchGoogleRunningNewsTool - The Genkit tool definition.
  */
@@ -39,62 +39,65 @@ export type FetchGoogleRunningNewsToolOutput = z.infer<typeof FetchGoogleRunning
 export const fetchGoogleRunningNewsTool = ai.defineTool(
   {
     name: 'fetchGoogleRunningNewsTool',
-    description: 'Fetches recent running-related news articles. Can be tailored by location and categories if provided.',
+    description: 'Generates recent running-related news articles using AI. Can be tailored by location and categories if provided.',
     inputSchema: FetchGoogleRunningNewsToolInputSchema,
     outputSchema: FetchGoogleRunningNewsToolOutputSchema,
   },
   async (input: FetchGoogleRunningNewsToolInput): Promise<FetchGoogleRunningNewsToolOutput> => {
-    // In a real application, this would call a news API (e.g., Google News API, NewsAPI.org)
-    // For now, we'll return mock data based on the structure.
-    console.log('Fetching news with input:', input);
-
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    // Mocked articles (replace with actual API call)
-    const mockArticles: NewsArticle[] = [
-      {
-        title: "Record Numbers at the Annual City Marathon",
-        link: "https://example.com/news/city-marathon-record",
-        snippet: "This year's city marathon saw an unprecedented number of participants, with over 50,000 runners...",
-        source: "Local News Hub",
-      },
-      {
-        title: "New Trail Running Shoes Revolutionize Comfort and Grip",
-        link: "https://example.com/reviews/new-trail-shoes-2024",
-        snippet: "Brand X has just released its latest line of trail running shoes, promising unmatched comfort...",
-        source: "RunnersTech Magazine",
-      },
-      {
-        title: "Expert Tips for Improving Your 5K Time",
-        link: "https://example.com/articles/improve-5k-time",
-        snippet: "Coach Jane Doe shares her top strategies for runners looking to shave seconds off their 5K personal best.",
-        source: "Running Performance Blog",
-      },
-      {
-        title: "Nutrition for Endurance: Fueling Your Long Runs",
-        link: "https://example.com/guides/endurance-nutrition",
-        snippet: "Discover the best foods and hydration strategies to keep you going strong during those challenging long runs.",
-        source: "Healthy Runner",
-      },
-      {
-        title: "Local Running Club Announces Summer Race Series",
-        link: "https://example.com/events/summer-race-series",
-        snippet: `The ${input.userLocation || 'Local'} Gazelles running club has unveiled its exciting lineup of summer races...`,
-        source: "Community Sports Calendar",
-      },
-    ];
-    
-    // Simulate a case where no articles are found for specific criteria
-    if (input.searchCategories?.includes("marathon_majors") && input.userLocation === "RemoteVille") {
-         return { articles: [] };
+    const { userLocation, searchCategories } = input;
+    let searchQuery = "recent top running news";
+    if (searchCategories && searchCategories.length > 0) {
+      searchQuery += ` focusing on ${searchCategories.join(", ")}`;
+    }
+    if (userLocation && userLocation.trim() !== "" && userLocation.toLowerCase() !== "not set") {
+      searchQuery += ` relevant to ${userLocation}`;
     }
 
-    // Simulate an error case (e.g., API key issue or network problem)
-    // if (Math.random() < 0.1) { // 10% chance of error for testing
-    //   return { articles: [], error: "Simulated API error: Could not connect to news service." };
-    // }
+    const newsPrompt = `You are a news aggregation assistant. Provide up to 5 recent and relevant running news articles based on the following interest: "${searchQuery}".
+For each article, structure it with:
+- title: A concise and engaging headline.
+- link: A plausible, generic placeholder URL (e.g., https://example-news.com/story-slug).
+- snippet: A brief 1-2 sentence summary of what the article is about.
+- source: A plausible source name (e.g., "Running Today Magazine", "Global Athletics News").
 
-    return { articles: mockArticles.slice(0, 7) }; // Return up to 7 mock articles
+Return *only* a JSON array of these article objects. If no relevant articles are found, return an empty array.
+Example of a single article object:
+{ "title": "Marathon Season Kicks Off", "link": "https://example-news.com/marathon-season", "snippet": "Runners worldwide are preparing as the spring marathon season begins, with major events scheduled in several key cities.", "source": "World Running Digest" }
+`;
+
+    try {
+      const ExpectedLLMOutputSchema = z.array(NewsArticleSchema);
+      const { output: generatedArticles, errors: generationErrors } = await ai.generate({
+        prompt: newsPrompt,
+        output: {
+          format: 'json',
+          schema: ExpectedLLMOutputSchema
+        },
+        config: { temperature: 0.4 } // Slightly lower temperature for more factual-sounding news
+      });
+
+      if (generationErrors && generationErrors.length > 0) {
+        console.error("[fetchGoogleRunningNewsTool] LLM generation errors:", generationErrors);
+        const errorMessages = generationErrors.map(e => typeof e === 'string' ? e : (e as Error).message || 'Unknown generation error').join('; ');
+        return { articles: [], error: `AI generation failed: ${errorMessages}` };
+      }
+
+      if (generatedArticles && Array.isArray(generatedArticles)) {
+        const validatedArticles = generatedArticles.filter(
+          article => article.title && article.link && article.snippet && article.source
+        ).map(article => ({
+            ...article,
+            link: (article.link && (article.link.startsWith('http://') || article.link.startsWith('https://'))) ? article.link : `https://example-news.com/article/${encodeURIComponent(article.title.substring(0,30).replace(/\s+/g, '-').toLowerCase())}`
+        })).slice(0, 5); // Ensure max 5
+        return { articles: validatedArticles };
+      } else {
+        console.warn("[fetchGoogleRunningNewsTool] LLM did not return articles in the expected array format or output was null. Raw output:", generatedArticles);
+        return { articles: [], error: "AI returned no articles or unexpected format." };
+      }
+    } catch (error) { // Catch errors from ai.generate call itself (e.g., network, service unavailable)
+      console.error("[fetchGoogleRunningNewsTool] Exception during LLM call:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return { articles: [], error: `Error fetching news from AI: ${errorMessage}` };
+    }
   }
 );

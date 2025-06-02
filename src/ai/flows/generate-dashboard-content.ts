@@ -12,7 +12,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import type { NewsSearchCategory } from '@/lib/types';
-import { fetchGoogleRunningNewsTool, type FetchGoogleRunningNewsToolOutput } from '@/ai/tools/fetch-google-running-news-tool';
+import { fetchGoogleRunningNewsTool } from '@/ai/tools/fetch-google-running-news-tool';
 import { generateMotivationalPunTool, type GenerateMotivationalPunToolOutput } from '@/ai/tools/generate-motivational-pun-tool';
 
 // Zod schema for HourlyWeatherData - Internal, not exported
@@ -88,7 +88,7 @@ const GenerateDashboardOutputSchemaInternal = z.object({
       })
     )
     .max(5) // Ensure we don't exceed 5 stories
-    .describe('An array of up to 5 summarized news stories from Google Search. If no news stories were found or an error occurred with the news tool, this MUST be an empty array.'),
+    .describe('An array of up to 5 summarized news stories from the fetchGoogleRunningNewsTool. If no news stories were found or an error occurred with the news tool, this MUST be an empty array.'),
   planEndNotification: z.string().optional().describe("A message if the user's training plan has ended (e.g., if todaysWorkout indicates plan completion)."),
   dressMyRunSuggestion: z.array(DressMyRunItemSchemaInternal).describe('A DETAILED, ITEMIZED list of clothing recommendations based on weather at the recommended run time. Each item must be an object with "item" (string) and "category" (string). If weather is unavailable, this should be an empty array.'),
 });
@@ -101,13 +101,12 @@ export async function generateDashboardContent(input: GenerateDashboardInput): P
 
 const dashboardPrompt = ai.definePrompt({
   name: 'generateDashboardContentPrompt',
-  input: { schema: GenerateDashboardInputSchemaInternal }, // This schema defines what the prompt expects (original structured data)
+  input: { schema: GenerateDashboardInputSchemaInternal }, 
   output: { schema: GenerateDashboardOutputSchemaInternal },
   tools: [
     generateMotivationalPunTool,
-    fetchGoogleRunningNewsTool
+    fetchGoogleRunningNewsTool 
   ],
-  // The template string will now use pre-stringified JSON for complex objects
   prompt: `You are an AI assistant for "Shut Up and Run", a running companion app. Your task is to generate all content for the user's daily dashboard.
 
 User Details:
@@ -153,13 +152,13 @@ Follow these steps precisely:
 4.  **Top News Stories ('topStories' field):**
     *   Use the 'fetchGoogleRunningNewsTool'.
     *   The 'newsSearchCategoriesString' is a JSON string of the user's preferred categories. Parse it for the tool.
-    *   Provide it with: { "userLocation": "{{{locationCity}}}", "searchCategories": <parsed_news_search_categories_array> }
-    *   The tool returns: { "articles": [{ "title": "...", "link": "...", "snippet": "...", "source": "..." }, ...], "error": "optional_error_message" }
-    *   **CRITICAL**: If the tool returns an 'error' OR if 'articles' is missing, empty, or null, then 'topStories' in your JSON output MUST be an empty array ([]). Do NOT invent news.
-    *   If articles are available:
-        *   Select up to 5 of the most relevant and diverse articles.
-        *   For each, create an object with 'title', 'summary' (concise summary of the tool's 'snippet'), 'url' (from tool's 'link'), and 'source' (from tool's 'source').
-        *   Ensure all URLs are valid.
+    *   Provide the tool with: { "userLocation": "{{{locationCity}}}", "searchCategories": <parsed_news_search_categories_array_or_empty_if_none> }
+    *   The tool is expected to return: { "articles": [{ "title": "...", "link": "...", "snippet": "...", "source": "..." }, ...], "error": "optional_error_message" }
+    *   **CRITICAL**: If the tool call results in an 'error' in its output OR if the 'articles' array from the tool is missing, empty, or null, then the 'topStories' field in YOUR JSON output MUST be an empty array ([]). Do NOT invent news articles.
+    *   If articles are available from the tool:
+        *   Directly use the articles provided by the tool for the 'topStories' field. The tool is expected to provide up to 5 relevant articles with title, link (URL), snippet (summary), and source.
+        *   Ensure all URLs in the articles from the tool are treated as valid for output.
+        *   The 'summary' field in your output should be the 'snippet' from the tool.
 
 5.  **Plan End Notification ('planEndNotification' field, optional):**
     *   If '{{{todaysWorkout}}}' contains phrases like "plan completed", "final workout", or "congratulations on finishing your plan", include a positive message like: "Congratulations on completing your training plan, {{{userName}}}! Time to set a new goal?"
@@ -172,7 +171,7 @@ Follow these steps precisely:
     *   **Otherwise**: Based on the weather conditions (temp, feelsLike, pop, windSpeed, description) at the 'best time to run' you identified in step 2c from the parsed detailed weather, provide a DETAILED, ITEMIZED list of clothing recommendations. Be specific (e.g., "Lightweight, moisture-wicking t-shirt" not just "shirt"). Consider layers if needed.
 
 Ensure the final output is a single, valid JSON object matching the schema.
-Replace placeholders like '{{{parsedDetailedWeather.error}}}' with actual logic based on the parsed JSON string if needed within the prompt or by carefully structuring how the LLM should interpret the stringified JSON. For this prompt, I will assume the LLM can infer properties from the JSON string.
+Assume the LLM can infer properties from the JSON strings provided for detailedWeatherString and newsSearchCategoriesString.
 `,
 });
 
@@ -185,19 +184,16 @@ const generateDashboardContentFlow = ai.defineFlow(
   async (input: GenerateDashboardInput): Promise<GenerateDashboardOutput> => {
     console.log("[generateDashboardContentFlow] Input:", JSON.stringify(input, null, 2));
 
-    // Prepare input for the prompt, including pre-stringified JSON for complex objects
     const promptInput = {
       ...input,
       detailedWeatherString: JSON.stringify(input.detailedWeather),
-      newsSearchCategoriesString: input.newsSearchCategories ? JSON.stringify(input.newsSearchCategories) : '[]', // Handle undefined gracefully
+      newsSearchCategoriesString: input.newsSearchCategories ? JSON.stringify(input.newsSearchCategories) : '[]', 
     };
 
-    // Call the prompt with the augmented input
     const { output, errors } = await dashboardPrompt(promptInput);
 
     if (errors && errors.length > 0) {
         console.error("[generateDashboardContentFlow] Errors during prompt generation:", errors);
-        // Potentially throw or return a structured error if needed
     }
 
     if (!output) {
@@ -214,13 +210,13 @@ const generateDashboardContentFlow = ai.defineFlow(
       }
 
       let fallbackWeatherSummary: string;
-      const weatherInput = input.detailedWeather; // Use original structured input for this logic
+      const weatherInput = input.detailedWeather; 
       const weatherHasError = typeof weatherInput === 'object' && weatherInput && 'error' in weatherInput && typeof (weatherInput as any).error === 'string' && (weatherInput as any).error.length > 0;
 
       if (weatherHasError) {
-        fallbackWeatherSummary = `Weather forecast for ${input.locationCity} is currently unavailable: ${(weatherInput as any).error}`;
+        fallbackWeatherSummary = `Weather forecast for ${input.locationCity || 'your location'} is currently unavailable: ${(weatherInput as any).error}`;
       } else {
-        fallbackWeatherSummary = `Could not generate weather summary and running recommendation for ${input.locationCity} at this time due to an AI processing issue. Please check back later.`;
+        fallbackWeatherSummary = `Could not generate weather summary and running recommendation for ${input.locationCity || 'your location'} at this time due to an AI processing issue. Please check back later.`;
       }
       const fallbackWorkout = input.todaysWorkout || "No workout information available.";
       
@@ -229,7 +225,7 @@ const generateDashboardContentFlow = ai.defineFlow(
         weatherSummary: fallbackWeatherSummary,
         workoutForDisplay: fallbackWorkout,
         topStories: [], 
-        planEndNotification: null, // Use null instead of undefined for Firestore compatibility
+        planEndNotification: null, 
         dressMyRunSuggestion: [],
       };
       console.log("[generateDashboardContentFlow] Returning fallback due to no AI output:", fallbackResult);
@@ -262,7 +258,7 @@ const generateDashboardContentFlow = ai.defineFlow(
                 return false;
             }
             return true;
-        }).slice(0, 5);
+        }).slice(0, 5); // Ensure max 5 stories
     }
     
     if (!output.dressMyRunSuggestion || !Array.isArray(output.dressMyRunSuggestion)) {
@@ -276,30 +272,17 @@ const generateDashboardContentFlow = ai.defineFlow(
         );
     }
     
-    const weatherInputOriginal = input.detailedWeather; // Use original structured input for this logic
+    const weatherInputOriginal = input.detailedWeather; 
     const weatherHasErrorOriginal = typeof weatherInputOriginal === 'object' && weatherInputOriginal && 'error' in weatherInputOriginal && typeof (weatherInputOriginal as any).error === 'string' && (weatherInputOriginal as any).error.length > 0;
     if (weatherHasErrorOriginal && output.dressMyRunSuggestion.length > 0) {
         console.warn("[generateDashboardContentFlow] Weather had an error (from original input), but AI generated dressMyRunSuggestion. Overriding to empty array.");
         output.dressMyRunSuggestion = [];
     }
-
-    if (output.topStories.length > 0) {
-        try {
-            const newsToolCallParams = { userLocation: input.locationCity, searchCategories: input.newsSearchCategories };
-            console.log("[generateDashboardContentFlow] Verifying news tool results for AI-generated stories. Tool call params:", newsToolCallParams);
-            const newsToolResults: FetchGoogleRunningNewsToolOutput = await fetchGoogleRunningNewsTool(newsToolCallParams);
-            if (newsToolResults.error || !newsToolResults.articles || newsToolResults.articles.length === 0) {
-                console.warn("[generateDashboardContentFlow] VERIFICATION FAILED: News tool actually returned no articles or an error, but AI generated topStories. Overriding topStories to empty array. Tool Result:", newsToolResults);
-                output.topStories = [];
-            } else {
-                 console.log("[generateDashboardContentFlow] VERIFICATION PASSED: News tool returned articles, AI stories plausible. Articles from tool:", newsToolResults.articles.length);
-            }
-        } catch (toolError) {
-            console.warn("[generateDashboardContentFlow] VERIFICATION ERROR: Error calling fetchGoogleRunningNewsTool during safeguard check. Overriding topStories to empty array.", toolError);
-            output.topStories = [];
-        }
-    }
     
+    // Removed the redundant call to fetchGoogleRunningNewsTool for verification,
+    // as the tool itself is now AI-powered and should handle its own success/failure.
+    // The main prompt already instructs the LLM to use the tool's output directly or an empty array if the tool fails.
+
     console.log("[generateDashboardContentFlow] Returning processed output:", JSON.stringify(output, null, 2));
     return output;
   }
