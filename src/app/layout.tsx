@@ -4,7 +4,6 @@ import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { Toaster } from "@/components/ui/toaster";
-// Removed Script import as it's no longer used here for BMC
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -17,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Shut Up and Run',
-  description: 'Your No-Nonsense Running Companion',
+  title: 'Shut Up and Run: AI-Powered by Genkit & Gemini',
+  description: 'Your no-nonsense running companion, built with Next.js and developed in Firebase Studio, featuring AI by Genkit & Gemini.',
 };
 
 export default function RootLayout({
@@ -33,7 +32,6 @@ export default function RootLayout({
           {children}
           <Toaster />
         </FirebaseClientProvider>
-        {/* The Buy Me A Coffee widget script previously here has been removed */}
       </body>
     </html>
   );
