@@ -1,7 +1,9 @@
+
 'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import Script from 'next/script'; // Added for BMC button
 import {
   LayoutDashboard,
   User,
@@ -9,6 +11,7 @@ import {
   MessageSquareText,
   LogOut,
   Footprints,
+  Coffee, // Added for BMC link
 } from 'lucide-react';
 import {
   Sidebar,
@@ -84,6 +87,40 @@ export function AppSidebar() {
               <span>Log Out</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
+          {/* Buy Me A Coffee Button - visible when sidebar is expanded */}
+          <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+            <div className="flex justify-center w-full px-1 py-1">
+              <Script
+                src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js"
+                data-name="bmc-button"
+                data-slug="h9aq9muuYz"
+                data-color="#FFDD00"
+                data-emoji=""
+                data-font="Cookie"
+                data-text="Buy me a coffee"
+                data-outline-color="#000000"
+                data-font-color="#000000"
+                data-coffee-color="#ffffff"
+                strategy="afterInteractive"
+              />
+            </div>
+          </SidebarMenuItem>
+
+          {/* Buy Me A Coffee Icon Link - visible when sidebar is collapsed */}
+          <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+            <SidebarMenuButton
+              asChild
+              tooltip="Buy me a coffee"
+              className="justify-center !w-full"
+            >
+              <a href="https://coff.ee/h9aq9muuYz" target="_blank" rel="noopener noreferrer" className="flex justify-center w-full">
+                <Coffee className="h-5 w-5" />
+                <span className="sr-only">Buy me a coffee</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
