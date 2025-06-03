@@ -107,72 +107,73 @@ const dashboardPrompt = ai.definePrompt({
     generateMotivationalPunTool,
     fetchGoogleRunningNewsTool
   ],
-  prompt: `You are an AI assistant for "Shut Up and Run", a running companion app. Your task is to generate all content for the user's daily dashboard.
-
-User Details:
-- Name: {{{userName}}}
-- Location: {{{locationCity}}}
-- Running Level: {{{runningLevel}}}
-- Goal: {{{goal}}}
-- Today's Workout: {{{todaysWorkout}}}
-- Weather Unit: {{{weatherUnit}}}
-- Detailed Weather Data or Error (as JSON string): {{{detailedWeatherString}}}
-- News Search Categories (as JSON string): {{{newsSearchCategoriesString}}}
-
-Your response MUST be a single JSON object strictly adhering to the GenerateDashboardOutputSchema.
-
-Follow these steps precisely:
-
-1.  **Greeting ('greeting' field):**
-    *   Use the 'generateMotivationalPunTool' to create a personalized greeting.
-    *   The tool expects: { "userName": "{{{userName}}}" }
-    *   The tool returns: { "greeting": "string" }
-    *   Use the returned 'greeting' for this field in your JSON output.
-
-2.  **Weather Summary & Running Recommendation ('weatherSummary' field):**
-    *   The input 'detailedWeather' (represented as 'detailedWeatherString' here, which is a JSON string of the original structured data) contains either full forecast data or an error object.
-    *   Parse 'detailedWeatherString' to access its properties.
-    *   **If 'detailedWeather.error' exists in the parsed object**:
-        *   The 'weatherSummary' field MUST BE: "Weather forecast for {{{locationCity}}} is currently unavailable: {{{parsedDetailedWeather.error}}}".
-        *   In this case, 'dressMyRunSuggestion' MUST be an empty array ([]).
-    *   **Otherwise (if 'detailedWeather.hourly' exists and no error in the parsed object)**:
-        *   a. **Daily Overview**: Start with "Today in {{{parsedDetailedWeather.locationName}}} ({{{parsedDetailedWeather.date}}}), expect {{{parsedDetailedWeather.overallDescription}}}."
-        *   b. **Temperature & Sun**: Seamlessly continue with: "High of {{{parsedDetailedWeather.tempMax}}}{{{weatherUnit}}}, low of {{{parsedDetailedWeather.tempMin}}}{{{weatherUnit}}}. Sunrise: {{{parsedDetailedWeather.sunrise}}}, Sunset: {{{parsedDetailedWeather.sunset}}}. Avg Humidity: {{{parsedDetailedWeather.humidityAvg}}}%."
-        *   c. **Best Run Time**: Analyze 'parsedDetailedWeather.hourly' (fields: 'time', 'temp', 'feelsLike', 'description', 'pop', 'windSpeed') to find the BEST time slot(s) to run. Prioritize:
-            *   Lowest 'pop' (chance of precipitation).
-            *   Moderate 'feelsLike' temperatures (avoid extremes).
-            *   Lower 'windSpeed'.
-            *   Generally, daytime hours unless conditions are significantly better at dawn/dusk.
-        *   d. **Recommendation Text**: Append to the summary: " The best time for your run looks to be [recommended time, e.g., 'around 7 AM' or 'between 4 PM and 6 PM'] because [brief explanation, e.g., 'temperatures will be cooler and chance of rain is lowest.' or 'it offers a good balance of mild temperatures and lower winds.']."
-        *   Combine a, b, and d into a single, coherent paragraph for 'weatherSummary'.
-
-3.  **Workout for Display ('workoutForDisplay' field):**
-    *   Use the exact string provided in '{{{todaysWorkout}}}'.
-
-4.  **Top News Stories ('topStories' field):**
-    *   Use the 'fetchGoogleRunningNewsTool'.
-    *   The 'newsSearchCategoriesString' is a JSON string of the user's preferred categories. Parse it for the tool.
-    *   The tool call will use { "userLocation": "{{{locationCity}}}", "searchCategories": <parsed_news_search_categories_array_or_empty_if_none> }
-    *   The tool is expected to return: { "articles": [{ "title": "...", "link": "...", "snippet": "...", "source": "..." }, ...], "error": "optional_error_message" }
-    *   **CRITICAL**: If the tool call results in an 'error' in its output OR if the 'articles' array from the tool is missing, empty, or null, then the 'topStories' field in YOUR JSON output MUST be an empty array ([]). Do NOT invent news articles.
-    *   If articles are available from the tool:
-        *   Directly use the articles provided by the tool for the 'topStories' field. The tool is expected to provide up to 5 relevant articles with title, link (URL), snippet (summary), and source.
-        *   Ensure all URLs in the articles from the tool are treated as valid for output.
-        *   The 'summary' field in your output should be the 'snippet' from the tool.
-
-5.  **Plan End Notification ('planEndNotification' field, optional):**
-    *   If '{{{todaysWorkout}}}' contains phrases like "plan completed", "final workout", or "congratulations on finishing your plan", include a positive message like: "Congratulations on completing your training plan, {{{userName}}}! Time to set a new goal?"
-    *   Otherwise, omit this field or set to undefined/null.
-
-6.  **Dress Your Run Suggestion ('dressMyRunSuggestion' field):**
-    *   This MUST be a JSON array of objects, each like: { "item": "Specific clothing item", "category": "general_category_from_list" }.
-    *   The category MUST be one of: hat, visor, sunglasses, headband, shirt, tank-top, long-sleeve, base-layer, mid-layer, jacket, vest, windbreaker, rain-jacket, shorts, capris, tights, pants, gloves, mittens, socks, shoes, gaiter, balaclava, accessory.
-    *   **If 'detailedWeather.error' exists in parsed 'detailedWeatherString'**: 'dressMyRunSuggestion' MUST be an empty array ([]).
-    *   **Otherwise**: Based on the weather conditions (temp, feelsLike, pop, windSpeed, description) at the 'best time to run' you identified in step 2c from the parsed detailed weather, provide a DETAILED, ITEMIZED list of clothing recommendations. Be specific (e.g., "Lightweight, moisture-wicking t-shirt" not just "shirt"). Consider layers if needed.
-
-Ensure the final output is a single, valid JSON object matching the schema.
-Assume the LLM can infer properties from the JSON strings provided for detailedWeatherString and newsSearchCategoriesString.
-\`,
+  prompt: [
+    'You are an AI assistant for "Shut Up and Run", a running companion app. Your task is to generate all content for the user\\\'s daily dashboard.',
+    '',
+    'User Details:',
+    '- Name: {{{userName}}}',
+    '- Location: {{{locationCity}}}',
+    '- Running Level: {{{runningLevel}}}',
+    '- Goal: {{{goal}}}',
+    '- Today\\\'s Workout: {{{todaysWorkout}}}',
+    '- Weather Unit: {{{weatherUnit}}}',
+    '- Detailed Weather Data or Error (as JSON string): {{{detailedWeatherString}}}',
+    '- News Search Categories (as JSON string): {{{newsSearchCategoriesString}}}',
+    '',
+    'Your response MUST be a single JSON object strictly adhering to the GenerateDashboardOutputSchema.',
+    '',
+    'Follow these steps precisely:',
+    '',
+    '1.  **Greeting (\\\'greeting\\\' field):**',
+    '    *   Use the \\\'generateMotivationalPunTool\\\' to create a personalized greeting.',
+    '    *   The tool expects: { "userName": "{{{userName}}}" }',
+    '    *   The tool returns: { "greeting": "string" }',
+    '    *   Use the returned \\\'greeting\\\' for this field in your JSON output.',
+    '',
+    '2.  **Weather Summary & Running Recommendation (\\\'weatherSummary\\\' field):**',
+    '    *   The input \\\'detailedWeather\\\' (represented as \\\'detailedWeatherString\\\' here, which is a JSON string of the original structured data) contains either full forecast data or an error object.',
+    '    *   Parse \\\'detailedWeatherString\\\' to access its properties.',
+    '    *   **If \\\'detailedWeather.error\\\' exists in the parsed object**: ',
+    '        *   The \\\'weatherSummary\\\' field MUST BE: "Weather forecast for {{{locationCity}}} is currently unavailable: {{{parsedDetailedWeather.error}}}".',
+    '        *   In this case, \\\'dressMyRunSuggestion\\\' MUST be an empty array ([]).',
+    '    *   **Otherwise (if \\\'detailedWeather.hourly\\\' exists and no error in the parsed object)**:',
+    '        *   a. **Daily Overview**: Start with "Today in {{{parsedDetailedWeather.locationName}}} ({{{parsedDetailedWeather.date}}}), expect {{{parsedDetailedWeather.overallDescription}}}."',
+    '        *   b. **Temperature & Sun**: Seamlessly continue with: "High of {{{parsedDetailedWeather.tempMax}}}{{{weatherUnit}}}, low of {{{parsedDetailedWeather.tempMin}}}{{{weatherUnit}}}. Sunrise: {{{parsedDetailedWeather.sunrise}}}, Sunset: {{{parsedDetailedWeather.sunset}}}. Avg Humidity: {{{parsedDetailedWeather.humidityAvg}}}%."',
+    '        *   c. **Best Run Time**: Analyze \\\'parsedDetailedWeather.hourly\\\' (fields: \\\'time\\\', \\\'temp\\\', \\\'feelsLike\\\', \\\'description\\\', \\\'pop\\\', \\\'windSpeed\\\') to find the BEST time slot(s) to run. Prioritize:',
+    '            *   Lowest \\\'pop\\\' (chance of precipitation).',
+    '            *   Moderate \\\'feelsLike\\\' temperatures (avoid extremes).',
+    '            *   Lower \\\'windSpeed\\\'.',
+    '            *   Generally, daytime hours unless conditions are significantly better at dawn/dusk.',
+    '        *   d. **Recommendation Text**: Append to the summary: " The best time for your run looks to be [recommended time, e.g., \\\'around 7 AM\\\' or \\\'between 4 PM and 6 PM\\\'] because [brief explanation, e.g., \\\'temperatures will be cooler and chance of rain is lowest.\\\' or \\\'it offers a good balance of mild temperatures and lower winds.\\\']."',
+    '        *   Combine a, b, and d into a single, coherent paragraph for \\\'weatherSummary\\\'.',
+    '',
+    '3.  **Workout for Display (\\\'workoutForDisplay\\\' field):**',
+    '    *   Use the exact string provided in \\\'{{{todaysWorkout}}}\\\'.',
+    '',
+    '4.  **Top News Stories (\\\'topStories\\\' field):**',
+    '    *   Use the \\\'fetchGoogleRunningNewsTool\\\'.',
+    '    *   The \\\'newsSearchCategoriesString\\\' is a JSON string of the user\\\'s preferred categories. Parse it for the tool.',
+    '    *   The tool call will use { "userLocation": "{{{locationCity}}}", "searchCategories": <parsed_news_search_categories_array_or_empty_if_none> }',
+    '    *   The tool is expected to return: { "articles": [{ "title": "...", "link": "...", "snippet": "...", "source": "..." }, ...], "error": "optional_error_message" }',
+    '    *   **CRITICAL**: If the tool call results in an \\\'error\\\' in its output OR if the \\\'articles\\\' array from the tool is missing, empty, or null, then the \\\'topStories\\\' field in YOUR JSON output MUST be an empty array ([]). Do NOT invent news articles.',
+    '    *   If articles are available from the tool:',
+    '        *   Directly use the articles provided by the tool for the \\\'topStories\\\' field. The tool is expected to provide up to 5 relevant articles with title, link (URL), snippet (summary), and source.',
+    '        *   Ensure all URLs in the articles from the tool are treated as valid for output.',
+    '        *   The \\\'summary\\\' field in your output should be the \\\'snippet\\\' from the tool.',
+    '',
+    '5.  **Plan End Notification (\\\'planEndNotification\\\' field, optional):**',
+    '    *   If \\\'{{{todaysWorkout}}}\\\' contains phrases like "plan completed", "final workout", or "congratulations on finishing your plan", include a positive message like: "Congratulations on completing your training plan, {{{userName}}}! Time to set a new goal?"',
+    '    *   Otherwise, omit this field or set to undefined/null.',
+    '',
+    '6.  **Dress Your Run Suggestion (\\\'dressMyRunSuggestion\\\' field):**',
+    '    *   This MUST be a JSON array of objects, each like: { "item": "Specific clothing item", "category": "general_category_from_list" }.',
+    '    *   The category MUST be one of: hat, visor, sunglasses, headband, shirt, tank-top, long-sleeve, base-layer, mid-layer, jacket, vest, windbreaker, rain-jacket, shorts, capris, tights, pants, gloves, mittens, socks, shoes, gaiter, balaclava, accessory.',
+    '    *   **If \\\'detailedWeather.error\\\' exists in parsed \\\'detailedWeatherString\\\'**: \\\'dressMyRunSuggestion\\\' MUST be an empty array ([]).',
+    '    *   **Otherwise**: Based on the weather conditions (temp, feelsLike, pop, windSpeed, description) at the \\\'best time to run\\\' you identified in step 2c from the parsed detailed weather, provide a DETAILED, ITEMIZED list of clothing recommendations. Be specific (e.g., "Lightweight, moisture-wicking t-shirt" not just "shirt"). Consider layers if needed.',
+    '',
+    'Ensure the final output is a single, valid JSON object matching the schema.',
+    'Assume the LLM can infer properties from the JSON strings provided for detailedWeatherString and newsSearchCategoriesString.'
+  ].join('\\n'),
 });
 
 const generateDashboardContentFlow = ai.defineFlow(
@@ -182,8 +183,6 @@ const generateDashboardContentFlow = ai.defineFlow(
     outputSchema: GenerateDashboardOutputSchemaInternal,
   },
   async (input: GenerateDashboardInput): Promise<GenerateDashboardOutput> => {
-    console.log("[generateDashboardContentFlow] Input:", JSON.stringify(input, null, 2));
-
     const promptInput = {
       ...input,
       detailedWeatherString: JSON.stringify(input.detailedWeather),
@@ -193,20 +192,13 @@ const generateDashboardContentFlow = ai.defineFlow(
     try {
       const { output, errors } = await dashboardPrompt(promptInput);
 
-      if (errors && errors.length > 0) {
-          console.error("[generateDashboardContentFlow] Errors during prompt generation:", errors);
-      }
+      // Errors during prompt generation can be logged if needed in future
 
       if (!output) {
-        console.error("[generateDashboardContentFlow] AI prompt did not produce any output for input:", JSON.stringify(promptInput, null, 2));
-        throw new Error("AI prompt did not produce output"); // Throw to fall into the catch block
+        throw new Error("AI prompt did not produce output");
       }
 
-      console.log("[generateDashboardContentFlow] AI prompt produced output (raw):", JSON.stringify(output, null, 2));
-
-      // Safeguards for AI output consistency
       if (!output.topStories || !Array.isArray(output.topStories)) {
-          console.warn("[generateDashboardContentFlow] AI output for topStories was not an array or was missing. Defaulting to empty array. Received:", output.topStories);
           output.topStories = [];
       } else {
           output.topStories = output.topStories.filter(story => {
@@ -218,21 +210,20 @@ const generateDashboardContentFlow = ai.defineFlow(
                   (typeof story.source === 'string' || story.source === undefined);
 
               if (!hasValidFields) {
-                  console.warn("[generateDashboardContentFlow] Filtering out story with missing/invalid fields:", story);
                   return false;
               }
               try {
                   new URL(story.url);
               } catch (e) {
+                   // console.warn(`[generateDashboardContentFlow] Filtering out story with invalid URL: "${story.url}" Title: "${story.title}"`);
                    console.warn('[generateDashboardContentFlow] Filtering out story with invalid URL: "' + story.url + '" Title: "' + story.title + '"');
                   return false;
               }
               return true;
-          }).slice(0, 5); // Ensure max 5 stories
+          }).slice(0, 5);
       }
 
       if (!output.dressMyRunSuggestion || !Array.isArray(output.dressMyRunSuggestion)) {
-          console.warn("[generateDashboardContentFlow] AI output for dressMyRunSuggestion was not an array or missing. Defaulting to empty array. Received:", output.dressMyRunSuggestion);
           output.dressMyRunSuggestion = [];
       } else {
           output.dressMyRunSuggestion = output.dressMyRunSuggestion.filter(item =>
@@ -245,17 +236,13 @@ const generateDashboardContentFlow = ai.defineFlow(
       const weatherInputOriginal = input.detailedWeather;
       const weatherHasErrorOriginal = typeof weatherInputOriginal === 'object' && weatherInputOriginal && 'error' in weatherInputOriginal && typeof (weatherInputOriginal as any).error === 'string' && (weatherInputOriginal as any).error.length > 0;
       if (weatherHasErrorOriginal && output.dressMyRunSuggestion.length > 0) {
-          console.warn("[generateDashboardContentFlow] Weather had an error (from original input), but AI generated dressMyRunSuggestion. Overriding to empty array.");
           output.dressMyRunSuggestion = [];
       }
 
-      // Ensure planEndNotification is null if undefined or empty string for Firestore compatibility
       if (output.planEndNotification === undefined || (typeof output.planEndNotification === 'string' && output.planEndNotification.trim() === '')) {
         output.planEndNotification = null;
       }
 
-
-      console.log("[generateDashboardContentFlow] Returning processed output:", JSON.stringify(output, null, 2));
       return output;
     } catch (error) {
       console.error("[generateDashboardContentFlow] Error during main AI prompt execution, attempting fallback:", error);
@@ -266,7 +253,7 @@ const generateDashboardContentFlow = ai.defineFlow(
           fallbackGreeting = greetingResult.greeting;
         }
       } catch (greetingError) {
-        console.error("[generateDashboardContentFlow] Fallback greeting generation also failed:", greetingError);
+        // Fallback greeting generation error can be logged if needed
       }
 
       let fallbackWeatherSummary: string;
@@ -296,7 +283,7 @@ const generateDashboardContentFlow = ai.defineFlow(
           }));
         }
       } catch (newsError) {
-        console.error("[generateDashboardContentFlow] Fallback news fetching also failed:", newsError);
+        // Fallback news fetching error can be logged if needed
       }
 
       const fallbackResult: GenerateDashboardOutput = {
@@ -307,9 +294,7 @@ const generateDashboardContentFlow = ai.defineFlow(
         planEndNotification: null,
         dressMyRunSuggestion: [],
       };
-      console.log("[generateDashboardContentFlow] Returning fallback due to no AI output:", fallbackResult);
       return fallbackResult;
     }
   }
 );
-
