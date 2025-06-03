@@ -15,7 +15,7 @@ export const UserProfileSchema = z.object({
   goal: z.enum(["5K", "10K", "Half Marathon", "Marathon", "50K/Ultramarathon"]).default("5K"),
   daysPerWeek: z.number().min(1).max(7).default(3),
   preferredWorkoutTypes: z.string().optional().default(""),
-  availableTime: z.string().optional().default(""), 
+  availableTime: z.string().optional().default(""),
   equipmentAvailable: z.string().optional().default(""),
   newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional().default([]), // Use the defined const array
   locationCity: z.string().optional().default(""),
@@ -25,8 +25,8 @@ export const UserProfileSchema = z.object({
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
 export const UserSchema = z.object({
-  id: z.string(), 
-  email: z.string().email().optional(), 
+  id: z.string(),
+  email: z.string().email().optional(),
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
   profile: UserProfileSchema.default({
@@ -47,7 +47,7 @@ export const UserSchema = z.object({
 export type User = z.infer<typeof UserSchema>;
 
 export const WorkoutSchema = z.object({
-  date: z.string(), 
+  date: z.string(),
   description: z.string(),
   type: z.string(),
   completed: z.boolean().default(false),
@@ -57,8 +57,8 @@ export type Workout = z.infer<typeof WorkoutSchema>;
 export const TrainingPlanSchema = z.object({
   id: z.string(),
   userId: z.string(),
-  startDate: z.string(), 
-  endDate: z.string(), 
+  startDate: z.string(),
+  endDate: z.string(),
   rawPlanText: z.string(),
   fitnessLevel: UserProfileSchema.shape.fitnessLevel,
   runningExperience: UserProfileSchema.shape.runningExperience,
@@ -86,13 +86,13 @@ export const DashboardCacheSchema = z.object({
   id: z.string(), // userId
   userId: z.string(),
   cacheDate: z.string(), // ISO date string YYYY-MM-DD
-  
+
   // Fields from GenerateDashboardOutputSchema
   greeting: z.string(),
   weatherSummary: z.string(),
   workoutForDisplay: z.string(),
   topStories: z.array(NewsStoryForCacheSchema),
-  planEndNotification: z.string().optional(),
+  planEndNotification: z.string().nullable().optional(), // Ensure it can be null
   dressMyRunSuggestion: z.array(DressMyRunItemForCacheSchema),
 
   // Store the inputs to the flow as well, for invalidation checks
@@ -101,6 +101,7 @@ export const DashboardCacheSchema = z.object({
       locationCity: z.string().optional(),
       weatherUnit: z.enum(['C','F']).optional(),
       newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional(),
+      trainingPlanId: z.string().nullable().optional(), // Added trainingPlanId
       // Add other relevant profile fields that influence dashboard content if needed
   }).optional(),
 });
