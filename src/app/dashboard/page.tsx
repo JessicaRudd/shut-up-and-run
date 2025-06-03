@@ -119,7 +119,7 @@ export default function DashboardPage() {
         planEndNotification: generatedContent.planEndNotification ?? null,
         dressMyRunSuggestion: generatedContent.dressMyRunSuggestion,
         cachedInputs: {
-            locationCity: userData.profile.locationCity,
+ locationCity: userData.profile.locationCity,
             weatherUnit: userData.profile.weatherUnit,
             newsSearchCategories: userData.profile.newsSearchCategories,
             trainingPlanId: userData.trainingPlanId ?? null, // Store current trainingPlanId
@@ -181,7 +181,7 @@ export default function DashboardPage() {
       });
     } else if (authUser && userData && (!isTrainingPlanLoading || trainingPlanData === undefined)) {
       generateAndCacheDashboardContent();
-    }
+ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isAuthUserLoading, isUserDataLoading, isCacheLoading,
@@ -192,7 +192,13 @@ export default function DashboardPage() {
     userError, cacheError
   ]);
 
-
+ if (isAuthUserLoading || isUserDataLoading || isCacheLoading || isGeneratingDashboard || (authUser && userData && (!cachedDashboardData || cachedDashboardData.cacheDate !== todayISO || cachedDashboardData.cachedInputs?.trainingPlanId !== (userData.trainingPlanId ?? null)))) {
+    if (!userData && !isAuthUserLoading) {
+ // User is logged in but user doc is not found - likely first time login, show profile prompt
+    } else {
+ // Show loading/generating state
+    }
+ }
   if (isAuthUserLoading || (authUser && isUserDataLoading && !userData) || (isCacheLoading && !cachedDashboardData && !isGeneratingDashboard && !dashboardContent)) {
     return (
       <AppLayout>

@@ -21,6 +21,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useFirestore, useUser, addDocumentNonBlocking } from '@/firebase'; // Added useFirestore, useUser, addDocumentNonBlocking
+import { collection } from 'firebase/firestore'; // Added collection
+import type { FeedbackSubmission } from '@/lib/firebase-schemas'; // Import the new type
 
 const feedbackFormSchema = z.object({
   name: z.string().min(1, { message: 'Name is required.' }).optional(),
@@ -40,6 +43,8 @@ interface FeedbackFormProps {
 export function FeedbackForm({ userName, userEmail }: FeedbackFormProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const firestore = useFirestore();
+  const { user: authUser } = useUser(); // Get the authenticated user
 
   const form = useForm<FeedbackFormValues>({
     resolver: zodResolver(feedbackFormSchema),
@@ -53,18 +58,45 @@ export function FeedbackForm({ userName, userEmail }: FeedbackFormProps) {
 
   const onSubmit = async (data: FeedbackFormValues) => {
     setIsSubmitting(true);
-    // In a real app, this would send data to a backend (e.g., Firestore, API endpoint)
-    console.log('Feedback submitted:', data); 
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    toast({
-      title: 'Feedback Submitted!',
-      description: "Thanks for helping us improve Shut Up and Run.",
-    });
-    form.reset(); // Reset form after submission
-    setIsSubmitting(false);
+    if (!firestore) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Could not connect to the database. Please try again later.',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const feedbackData: FeedbackSubmission = {
+        userId: authUser?.uid || undefined, // Store UID if user is logged in
+        userName: data.name || undefined,
+        userEmail: data.email || undefined,
+        feedbackType: data.feedbackType,
+        message: data.message,
+        submittedAt: new Date().toISOString(),
+      };
+
+      const feedbackCollectionRef = collection(firestore, 'feedback');
+      addDocumentNonBlocking(feedbackCollectionRef, feedbackData); // Non-blocking add
+
+      toast({
+        title: 'Feedback Submitted!',
+        description: "Thanks for helping us improve Shut Up and Run.",
+      });
+      form.reset({ name: userName || '', email: userEmail || '', feedbackType: 'general', message: '' });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Submission Failed',
+        description: 'Could not submit feedback. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -84,7 +116,7 @@ export function FeedbackForm({ userName, userEmail }: FeedbackFormProps) {
                   <FormItem>
                     <FormLabel>Name (Optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Your name" {...field} />
+                      <Input placeholder="Your name" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -97,7 +129,7 @@ export function FeedbackForm({ userName, userEmail }: FeedbackFormProps) {
                   <FormItem>
                     <FormLabel>Email (Optional)</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
+                      <Input type="email" placeholder="you@example.com" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
