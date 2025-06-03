@@ -65,9 +65,12 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
       query += ` in ${userLocation}`;
     }
 
+    console.log(`[fetchGoogleRunningNewsTool] Calling Google Custom Search API with URL: ${apiUrl}`);
     const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=5&sort=date`; // Get top 5, sort by date if possible (CSE feature)
 
     try {
+      console.log(`[fetchGoogleRunningNewsTool] Sending request to: ${apiUrl}`);
+
       const response = await fetch(apiUrl);
       const responseData = await response.json();
 
@@ -75,6 +78,8 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
         const apiError = responseData?.error?.message || `HTTP error! status: ${response.status}`;
         console.error(`[fetchGoogleRunningNewsTool] API Error: ${response.status}`, responseData);
         return { articles: [], error: `Error fetching news from Google: ${apiError}` };
+      } else {
+        console.log(`[fetchGoogleRunningNewsTool] Received response with status ${response.status}:`, responseData);
       }
       
       if (responseData.error) {
