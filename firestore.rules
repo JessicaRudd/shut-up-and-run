@@ -4,42 +4,59 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper function to check if the requesting user is the owner of the document
-    function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
-    }
-
-    // Users:
-    // - Authenticated users can create their own user document.
-    // - Users can read, update, and delete their own document.
+    // Users Collection
+    // Users can read and update their own profile.
+    // Users can create their own profile document upon signup.
     match /users/{userId} {
-      allow read, update, delete: if isOwner(userId);
-      allow create: if request.auth != null && request.resource.data.id == request.auth.uid;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // Ensure that when a user document is created, its ID matches the UID of the user creating it,
+      // and the 'id' field within the document also matches the UID.
+      allow create: if request.auth != null && request.auth.uid == userId && request.resource.data.id == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // Users should not delete their own accounts directly.
     }
 
-    // TrainingPlans:
-    // - Authenticated users can create training plans for themselves.
-    // - Users can read, update, and delete their own training plans.
-    // - Ensure userId cannot be changed on update.
-    match /trainingPlans/{planId} {
-      allow read, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    // TrainingPlans Collection
+    // Users can manage their own training plans.
+    match /trainingPlans/{trainingPlanId} {
+      // Allow read if the plan's userId matches the authenticated user's UID.
+      allow read: if request.auth != null && get(/databases/$(database)/documents/trainingPlans/$(trainingPlanId)).data.userId == request.auth.uid;
+      // Allow create if the new plan's userId matches the authenticated user's UID.
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && resource.data.userId == request.auth.uid && request.resource.data.userId == resource.data.userId;
+      // Allow update if the existing plan's userId matches the authenticated user's UID.
+      allow update: if request.auth != null && get(/databases/$(database)/documents/trainingPlans/$(trainingPlanId)).data.userId == request.auth.uid;
+      // Allow delete if the existing plan's userId matches the authenticated user's UID.
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/trainingPlans/$(trainingPlanId)).data.userId == request.auth.uid;
     }
 
-    // DashboardCache:
-    // - Authenticated users can create their own dashboard cache.
-    // - Users can read, update, and delete their own dashboard cache.
-    // - Document ID is expected to be the userId.
-    match /dashboardCache/{userId} {
-      allow read, update, delete: if isOwner(userId);
-      allow create: if request.auth != null && request.resource.data.id == request.auth.uid && request.resource.data.userId == request.auth.uid;
+    // WeatherCache Collection
+    // Assuming this is a global cache. Authenticated users can read. Writes are restricted.
+    match /weatherCache/{weatherCacheId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Restrict client-side writes.
     }
 
-    // Feedback:
-    // - Allow authenticated and unauthenticated users to create feedback documents.
+    // DashboardCache Collection
+    // The document ID {dashboardCacheId} is expected to be the userId.
+    // Users can manage their own dashboard cache.
+    match /dashboardCache/{dashboardCacheId} {
+      allow read: if request.auth != null && request.auth.uid == dashboardCacheId;
+      // Ensure documentId, internal id field, and internal userId field all match auth uid on create.
+      allow create: if request.auth != null && request.auth.uid == dashboardCacheId
+                      && request.resource.data.id == request.auth.uid
+                      && request.resource.data.userId == request.auth.uid;
+      // Ensure documentId and internal userId field match auth uid on update.
+      allow update: if request.auth != null && request.auth.uid == dashboardCacheId
+                      && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && request.auth.uid == dashboardCacheId;
+    }
+
+    // Feedback Collection
+    // Authenticated users can submit feedback.
+    // Ensure the 'userId' field in the feedback document matches the authenticated user's UID.
     match /feedback/{feedbackId} {
-      allow create: true;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if false; // Restrict client-side read/update/delete.
     }
   }
 }
