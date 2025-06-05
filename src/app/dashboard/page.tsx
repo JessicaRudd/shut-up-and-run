@@ -100,7 +100,7 @@ export default function DashboardPage() {
         todaysWorkout: todaysWorkoutStr,
         detailedWeather: detailedWeatherData,
         weatherUnit: userData.profile.weatherUnit,
-        newsSearchCategories: userData.profile.newsSearchCategories,
+        newsSearchCategories: userData.profile.newsSearchCategories || [], // Ensure array for flow
       };
 
       // 4. Call the main Genkit flow
@@ -122,7 +122,7 @@ export default function DashboardPage() {
         cachedInputs: {
             locationCity: userData.profile.locationCity,
             weatherUnit: userData.profile.weatherUnit,
-            newsSearchCategories: userData.profile.newsSearchCategories,
+            newsSearchCategories: userData.profile.newsSearchCategories || [], // Ensure array for cache
             trainingPlanId: userData.trainingPlanId ?? null,
         }
       };
@@ -163,10 +163,14 @@ export default function DashboardPage() {
     if (userData && cachedDashboardData?.cachedInputs) {
         const inputs = cachedDashboardData.cachedInputs;
         const profile = userData.profile;
+        // Ensure comparison handles undefined or null for newsSearchCategories gracefully
+        const currentNewsCategories = profile.newsSearchCategories || [];
+        const cachedNewsCategories = inputs.newsSearchCategories || [];
+
         profileSettingsChanged =
             inputs.locationCity !== profile.locationCity ||
             inputs.weatherUnit !== profile.weatherUnit ||
-            JSON.stringify(inputs.newsSearchCategories?.sort()) !== JSON.stringify(profile.newsSearchCategories?.sort()) ||
+            JSON.stringify(currentNewsCategories.sort()) !== JSON.stringify(cachedNewsCategories.sort()) ||
             inputs.trainingPlanId !== (userData.trainingPlanId ?? null);
     }
 

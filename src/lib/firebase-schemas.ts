@@ -17,7 +17,7 @@ export const UserProfileSchema = z.object({
   preferredWorkoutTypes: z.string().optional().default(""),
   availableTime: z.string().optional().default(""),
   equipmentAvailable: z.string().optional().default(""),
-  newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional().default([]), // Use the defined const array
+  newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional().default([]), // Changed from newsPreferences and ensure default
   locationCity: z.string().optional().default(""),
   weatherUnit: z.enum(['C', 'F']).default('C'),
   preferredLongRunDay: daysOfWeekEnum.default('Sunday'),
@@ -29,7 +29,7 @@ export const UserSchema = z.object({
   email: z.string().email().optional(),
   firstName: z.string().min(1, "First name is required."),
   lastName: z.string().min(1, "Last name is required."),
-  profile: UserProfileSchema.default({
+  profile: UserProfileSchema.default({ // Zod will apply defaults from UserProfileSchema
     fitnessLevel: 'Beginner',
     runningExperience: 'Not set',
     goal: '5K',
@@ -37,7 +37,7 @@ export const UserSchema = z.object({
     preferredWorkoutTypes: '',
     availableTime: '',
     equipmentAvailable: '',
-    newsSearchCategories: [],
+    newsSearchCategories: [], // Explicitly list for clarity if UserProfileSchema didn't have default
     locationCity: '',
     weatherUnit: 'C',
     preferredLongRunDay: 'Sunday',
@@ -100,9 +100,8 @@ export const DashboardCacheSchema = z.object({
   cachedInputs: z.object({
       locationCity: z.string().optional(),
       weatherUnit: z.enum(['C','F']).optional(),
-      newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional(),
-      trainingPlanId: z.string().nullable().optional(), // Added trainingPlanId
-      // Add other relevant profile fields that influence dashboard content if needed
+      newsSearchCategories: z.array(z.enum(newsSearchCategoryValuesForSchema)).optional(), // Ensure this is optional array
+      trainingPlanId: z.string().nullable().optional(),
   }).optional(),
 });
 export type DashboardCache = z.infer<typeof DashboardCacheSchema>;

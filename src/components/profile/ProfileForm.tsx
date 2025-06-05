@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox'; // Added Checkbox import
 import { useUser, useFirestore, useDoc, setDocumentNonBlocking } from '@/firebase'; // Changed import
 import { doc, type DocumentReference } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +25,7 @@ import { UserProfileSchema, type User as AppUser, type UserProfile } from '@/lib
 import { useEffect, useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
 
 // Combine User fields (firstName, lastName, email) and UserProfile fields for the form
 const ProfileFormSchema = z.object({
@@ -36,6 +38,12 @@ const ProfileFormSchema = z.object({
 type ProfileFormValues = z.infer<typeof ProfileFormSchema>;
 
 const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
+const newsSearchCategoryValuesForSchema = [ // Zod enums need explicit array
+  "geographic_area", "track_road_trail", "running_tech",
+  "running_apparel", "marathon_majors", "nutrition", "training"
+] as const;
+
 
 export function ProfileForm() {
   const { user: authUser, isUserLoading: isAuthUserLoading } = useUser();
@@ -64,24 +72,31 @@ export function ProfileForm() {
     if (userData) {
       let profileToSet;
       try {
-        profileToSet = UserProfileSchema.parse(userData.profile || {});
+        // Ensure all parts of profile are at least empty arrays/strings if missing, before parsing
+        const profileDataForParsing = {
+          ...UserProfileSchema.parse({}), // Start with defaults
+          ...(userData.profile || {}), // Overlay existing data
+          newsSearchCategories: userData.profile?.newsSearchCategories || [], // Explicitly default array
+        };
+        profileToSet = UserProfileSchema.parse(profileDataForParsing);
       } catch (e) {
         console.warn("Failed to parse existing user profile, falling back to schema defaults:", e);
         profileToSet = UserProfileSchema.parse({});
       }
       form.reset({
-        firstName: userData.firstName || '', // Ensure fallback for potentially missing fields
+        firstName: userData.firstName || '', 
         lastName: userData.lastName || '',
-        email: userData.email || '', // Use stored email or empty string
+        email: userData.email || '', 
         profile: profileToSet,
       });
     } else if (authUser && !isUserDataLoading && !userDataError) {
       // New user or user with no Firestore doc yet
+      const defaultProfile = UserProfileSchema.parse({});
       form.reset({
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
-        email: authUser.email || '', // Will be empty string for anonymous users, display only
-        profile: UserProfileSchema.parse({}),
+        email: authUser.email || '', 
+        profile: defaultProfile,
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,26 +104,22 @@ export function ProfileForm() {
 
 
   const onSubmit = async (data: ProfileFormValues) => {
-    if (!userDocRef || !authUser) { // Ensure authUser is also available
+    if (!userDocRef || !authUser) { 
       toast({ variant: 'destructive', title: 'Error', description: 'User not found or not authenticated.' });
       return;
     }
     setIsSubmitting(true);
     try {
-      // Construct the data to save.
-      // For anonymous users, authUser.email will be null.
-      // The UserSchema now supports optional email.
       const userDataToSave: Partial<AppUser> = {
         firstName: data.firstName,
         lastName: data.lastName,
         profile: data.profile,
       };
 
-      if (authUser.email) { // Only set email if it exists on authUser
+      if (authUser.email) { 
         userDataToSave.email = authUser.email;
       }
 
-      // Use setDoc with merge:true to create or update the document.
       setDocumentNonBlocking(userDocRef, userDataToSave, { merge: true });
       
       toast({ title: 'Profile Updated', description: 'Your profile has been successfully updated.' });
@@ -348,7 +359,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Preferred Workout Types</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Running, HIIT, Yoga" {...field} />
+                    <Input placeholder="e.g., Running, HIIT, Yoga" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormDescription>Comma-separated list of your preferred workout types.</FormDescription>
                   <FormMessage />
@@ -362,7 +373,7 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Typical Available Time for Workout</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., 30 minutes, 1 hour" {...field} />
+                    <Input placeholder="e.g., 30 minutes, 1 hour" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -375,12 +386,53 @@ export function ProfileForm() {
                 <FormItem>
                   <FormLabel>Equipment Available</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Dumbbells, Treadmill, None" {...field} />
+                    <Input placeholder="e.g., Dumbbells, Treadmill, None" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <h3 className="text-lg font-medium pt-4 border-t">News Preferences</h3>
+            
+            <FormField
+              control={form.control}
+              name="profile.newsSearchCategories"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="mb-4">
+                    <FormLabel className="text-base">News Categories</FormLabel>
+                    <FormDescription>
+                      Select the types of running news you&apos;d like to see.
+                    </FormDescription>
+                  </div>
+                  {newsSearchCategoryValuesForSchema.map((categoryValue) => (
+                    <FormItem key={categoryValue} className="flex flex-row items-start space-x-3 space-y-0 mb-2">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value?.includes(categoryValue)}
+                          onCheckedChange={(checked) => {
+                            const currentValue = field.value || [];
+                            return checked
+                              ? field.onChange([...currentValue, categoryValue])
+                              : field.onChange(
+                                currentValue.filter(
+                                    (value) => value !== categoryValue
+                                  )
+                                );
+                          }}
+                        />
+                      </FormControl>
+                      <FormLabel className="font-normal">
+                        {categoryValue.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </FormLabel>
+                    </FormItem>
+                  ))}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
 
             <Button type="submit" className="w-full md:w-auto" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
