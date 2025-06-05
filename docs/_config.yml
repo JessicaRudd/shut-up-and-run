@@ -1,0 +1,32 @@
+
+theme: jekyll-theme-minimal
+title: Shut Up and Run Documentation
+description: Official documentation for the Shut Up and Run application.
+logo: /assets/img/logo.png # Optional: Add a logo to docs/assets/img/logo.png
+
+# Navigation (optional, for some themes)
+# navigation:
+#   - title: Home
+#     url: /
+#   - title: User Guide
+#     url: /user-guide.html
+#   - title: Developer Guide
+#     url: /developer-guide/
+#   - title: Architecture
+#     url: /architecture.html
+#   - title: Deployment
+#     url: /deployment.html
+
+# GitHub repository (optional, for some themes)
+# github_username: your-github-username
+# github_repository: your-repo-name
+
+# Exclude from processing.
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
