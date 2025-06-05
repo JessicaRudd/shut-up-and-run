@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const todayISO = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
+  const currentDateFormatted = useMemo(() => format(new Date(), 'EEEE, MMMM do, yyyy'), []);
 
   const userDocRef = useMemo(() => {
     if (!firestore || !authUser?.uid) return null;
@@ -119,10 +120,10 @@ export default function DashboardPage() {
         planEndNotification: generatedContent.planEndNotification ?? null,
         dressMyRunSuggestion: generatedContent.dressMyRunSuggestion,
         cachedInputs: {
- locationCity: userData.profile.locationCity,
+            locationCity: userData.profile.locationCity,
             weatherUnit: userData.profile.weatherUnit,
             newsSearchCategories: userData.profile.newsSearchCategories,
-            trainingPlanId: userData.trainingPlanId ?? null, // Store current trainingPlanId
+            trainingPlanId: userData.trainingPlanId ?? null,
         }
       };
       setDocumentNonBlocking(dashboardCacheDocRef, newCacheData, { merge: true });
@@ -166,7 +167,7 @@ export default function DashboardPage() {
             inputs.locationCity !== profile.locationCity ||
             inputs.weatherUnit !== profile.weatherUnit ||
             JSON.stringify(inputs.newsSearchCategories?.sort()) !== JSON.stringify(profile.newsSearchCategories?.sort()) ||
-            inputs.trainingPlanId !== (userData.trainingPlanId ?? null); // Compare with current plan ID
+            inputs.trainingPlanId !== (userData.trainingPlanId ?? null);
     }
 
 
@@ -224,6 +225,11 @@ export default function DashboardPage() {
   if (pageError && !isGeneratingDashboard) {
     return (
         <AppLayout>
+            <div className="mb-4 text-center md:text-left">
+              <h2 className="text-xl font-semibold text-foreground">
+                {currentDateFormatted}
+              </h2>
+            </div>
             <Alert variant="destructive" className="mb-6">
               <Info className="h-4 w-4" />
               <AlertTitle>Dashboard Error</AlertTitle>
@@ -236,7 +242,12 @@ export default function DashboardPage() {
   if (isGeneratingDashboard || !dashboardContent) {
      return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-10rem)] text-center p-4">
+        <div className="mb-4 text-center md:text-left">
+          <h2 className="text-xl font-semibold text-foreground">
+            {currentDateFormatted}
+          </h2>
+        </div>
+        <div className="flex flex-col items-center justify-center h-[calc(100vh-14rem)] text-center p-4">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">Generating your personalized dashboard...</p>
         </div>
@@ -248,6 +259,11 @@ export default function DashboardPage() {
   return (
     <AuthGuard>
       <AppLayout>
+        <div className="mb-4 text-center md:text-left">
+          <h2 className="text-xl font-semibold text-foreground">
+            {currentDateFormatted}
+          </h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="md:col-span-2">
             <MotivationalGreeting
