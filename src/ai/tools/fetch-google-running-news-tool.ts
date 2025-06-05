@@ -1,3 +1,4 @@
+
 // src/ai/tools/fetch-google-running-news-tool.ts
 'use server';
 /**
@@ -38,7 +39,7 @@ export type FetchGoogleRunningNewsToolOutput = z.infer<typeof FetchGoogleRunning
 export const fetchGoogleRunningNewsTool = ai.defineTool(
   {
     name: 'fetchGoogleRunningNewsTool',
-    description: 'Fetches recent running-related news articles using the Google Custom Search API. Can be tailored by location and categories if provided.',
+    description: 'Fetches recent running-related news articles using the Google Custom Search API. Can be tailored by location and categories if provided. News is restricted to the last 30 days.',
     inputSchema: FetchGoogleRunningNewsToolInputSchema,
     outputSchema: FetchGoogleRunningNewsToolOutputSchema,
   },
@@ -47,48 +48,75 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
     const searchEngineId = process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID;
 
     if (!apiKey || !searchEngineId) {
-      console.error("[fetchGoogleRunningNewsTool] Google Custom Search API Key or Search Engine ID is missing in .env.local.");
+      console.error("[fetchGoogleRunningNewsTool] Google Custom Search API Key or Search Engine ID is missing.");
       return { articles: [], error: "News service is not configured. API Key or Search Engine ID missing." };
     }
 
     const { userLocation, searchCategories } = input;
-    let query = "running news";
+    let finalQuery = "";
+    const baseKeyword = "running";
+    const newsKeyword = "news";
+
+    const validUserLocation = userLocation && userLocation.trim() !== "" && userLocation.toLowerCase() !== "not set";
 
     if (searchCategories && searchCategories.length > 0) {
-      const categoryQuery = searchCategories
-        .map(cat => cat.replace(/_/g, ' ')) // Replace underscores for better search terms
-        .join(" OR "); // Use OR for multiple categories to broaden search
-      query += ` (${categoryQuery})`;
-    }
+      let keywords = searchCategories.map(cat => cat.replace(/_/g, ' '));
+      let locationToUse: string | undefined = undefined;
 
-    if (userLocation && userLocation.trim() !== "" && userLocation.toLowerCase() !== "not set") {
-      query += ` in ${userLocation}`;
-    }
+      if (searchCategories.includes("geographic_area") && validUserLocation) {
+        locationToUse = userLocation;
+        // Remove "geographic area" from keywords if it's acting as a location trigger
+        // and other keywords are present, or if it's the only keyword.
+        if (keywords.length > 1 || (keywords.length === 1 && keywords[0] === "geographic area")) {
+          keywords = keywords.filter(kw => kw.toLowerCase() !== "geographic area");
+        }
+      }
+      
+      if (keywords.length > 0) {
+        finalQuery = baseKeyword + " (" + keywords.join(" OR ") + ") " + newsKeyword;
+      } else {
+        finalQuery = baseKeyword + " " + newsKeyword; // Only "geographic_area" was selected and used for location
+      }
 
-    console.log(`[fetchGoogleRunningNewsTool] Calling Google Custom Search API with URL: ${apiUrl}`);
-    const apiUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=5&sort=date`; // Get top 5, sort by date if possible (CSE feature)
+      if (locationToUse) {
+        finalQuery += " in " + locationToUse;
+      }
+
+    } else { // No categories selected
+      finalQuery = "recent notable running news";
+      if (validUserLocation) { // If no categories, but location is present, make general news location specific
+          finalQuery += " in " + userLocation;
+      }
+    }
+    
+    const apiUrl = "https://www.googleapis.com/customsearch/v1?key=" + apiKey + 
+                   "&cx=" + searchEngineId + 
+                   "&q=" + encodeURIComponent(finalQuery) + 
+                   "&num=5" + 
+                   "&sort=date" + 
+                   "&dateRestrict=d30"; // Fetch news from the last 30 days
 
     try {
-      console.log(`[fetchGoogleRunningNewsTool] Sending request to: ${apiUrl}`);
+      console.log("[fetchGoogleRunningNewsTool] Sending request to: " + apiUrl);
 
       const response = await fetch(apiUrl);
       const responseData = await response.json();
 
       if (!response.ok) {
-        const apiError = responseData?.error?.message || `HTTP error! status: ${response.status}`;
-        console.error(`[fetchGoogleRunningNewsTool] API Error: ${response.status}`, responseData);
-        return { articles: [], error: `Error fetching news from Google: ${apiError}` };
+        const apiError = responseData?.error?.message || "HTTP error! status: " + response.status;
+        console.error("[fetchGoogleRunningNewsTool] API Error: " + response.status, responseData);
+        return { articles: [], error: "Error fetching news from Google: " + apiError };
       } else {
-        console.log(`[fetchGoogleRunningNewsTool] Received response with status ${response.status}:`, responseData);
+        console.log("[fetchGoogleRunningNewsTool] Received response with status " + response.status); // Removed responseData from here to avoid overly verbose logs
       }
       
       if (responseData.error) {
           console.error("[fetchGoogleRunningNewsTool] Google Search API returned an error in JSON payload:", responseData.error);
-          return { articles: [], error: `Google Search API error: ${responseData.error.message || 'Unknown error from API.'}` };
+          return { articles: [], error: "Google Search API error: " + (responseData.error.message || 'Unknown error from API.') };
       }
 
       if (!responseData.items || responseData.items.length === 0) {
-        console.log("[fetchGoogleRunningNewsTool] No articles found for query:", query);
+        console.log("[fetchGoogleRunningNewsTool] No articles found for query: " + finalQuery);
         return { articles: [] }; // No articles found
       }
 
@@ -116,7 +144,8 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
     } catch (error) {
       console.error("[fetchGoogleRunningNewsTool] Exception during API call:", error);
       const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
-      return { articles: [], error: `Error processing news request: ${errorMessage}` };
+      return { articles: [], error: "Error processing news request: " + errorMessage };
     }
   }
 );
+
