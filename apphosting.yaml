@@ -2,7 +2,7 @@
 # https://firebase.google.com/docs/app-hosting/configure
 
 # Firebase App Hosting uses Google Cloud Secret Manager to store secrets.
-# Create secrets in Secret Manager (e.g., RUNMATE_OPENWEATHERMAP_API_KEY)
+# Create secrets in Secret Manager (e.g., OPENWEATHERMAP_API_KEY)
 # and grant the App Hosting service account permission to access them.
 # Then, reference them here. The ${PROJECT_ID} variable will be
 # automatically substituted by App Hosting.
@@ -13,13 +13,14 @@
 # Emulator host variables are for local development and not needed here.
 
 env:
+  - variable: GEMINI_API_KEY
+    secret: projects/${PROJECT_ID}/secrets/GEMINI_API_KEY/versions/latest
   - variable: OPENWEATHERMAP_API_KEY
-    secret: secret://projects/${PROJECT_ID}/secrets/RUNMATE_OPENWEATHERMAP_API_KEY/versions/latest
+    secret: projects/${PROJECT_ID}/secrets/OPENWEATHERMAP_API_KEY/versions/latest
   - variable: GOOGLE_CUSTOM_SEARCH_API_KEY
-    secret: secret://projects/${PROJECT_ID}/secrets/RUNMATE_GOOGLE_SEARCH_API_KEY/versions/latest
+    secret: projects/${PROJECT_ID}/secrets/GOOGLE_CUSTOM_SEARCH_API_KEY/versions/latest
   - variable: GOOGLE_CUSTOM_SEARCH_ENGINE_ID
-    secret: secret://projects/${PROJECT_ID}/secrets/RUNMATE_GOOGLE_SEARCH_ENGINE_ID/versions/latest
-  # Example for a non-secret environment variable:
+    secret: projects/${PROJECT_ID}/secrets/GOOGLE_CUSTOM_SEARCH_ENGINE_ID/versions/latest
   # - variable: MY_APP_SETTING
   #   value: "some_configuration_value"
 
