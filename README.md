@@ -7,7 +7,7 @@ Shut Up and Run is a smart running companion app designed to help runners of all
 
 **For comprehensive documentation, including user guides, developer guides, architecture details, and deployment instructions, please visit our [official documentation site](docs/index.md) (or the deployed GitHub Pages link once available).**
 
-## Overview (from Old README - see full docs for more detail)
+## Overview
 
 Shut Up and Run combines a Next.js frontend with Firebase backend services and Genkit/Gemini for AI-driven personalization.
 
