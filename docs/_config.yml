@@ -2,7 +2,7 @@
 theme: jekyll-theme-minimal
 title: Shut Up and Run Documentation
 description: Official documentation for the Shut Up and Run application.
-logo: /assets/img/logo.png # Optional: Add a logo to docs/assets/img/logo.png
+logo: /assets/img/logo.jpg
 
 # Navigation (optional, for some themes)
 # navigation:
