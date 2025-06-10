@@ -89,11 +89,13 @@ export const fetchGoogleRunningNewsTool = ai.defineTool(
       }
     }
     
+    const currentTime = new Date();
+    const pastDate = new Date(currentTime.setDate(currentTime.getDate() - 30));
+    const pastDateFormatted = pastDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+
     const apiUrl = "https://www.googleapis.com/customsearch/v1?key=" + apiKey + 
                    "&cx=" + searchEngineId + 
-                   "&q=" + encodeURIComponent(finalQuery) + 
-                   "&num=5" + 
-                   "&sort=date" + 
+                   "&q=" + encodeURIComponent(finalQuery + ' after:' + pastDateFormatted) +
                    "&dateRestrict=d30"; // Fetch news from the last 30 days
 
     try {

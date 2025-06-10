@@ -36,6 +36,13 @@ export function RunningNews({ newsItems, planNotification }: RunningNewsProps) {
           </Alert>
         )}
       </CardHeader>
+      <CardContent className="pt-0 pb-2">
+         <Alert variant="default" className="bg-yellow-100 border-yellow-400 text-yellow-800">
+          <Info className="h-4 w-4 text-yellow-800" />
+          <AlertTitle>Work in Progress</AlertTitle>
+          <AlertDescription className="text-sm">This news section is under development and may not always display relevant or up-to-date information.</AlertDescription>
+        </Alert>
+      </CardContent>
       <CardContent>
         {isLoading ? (
           <ul className="space-y-4">

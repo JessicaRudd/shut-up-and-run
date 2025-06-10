@@ -63,7 +63,7 @@ export function ProfileForm() {
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: '', // Will be populated by useEffect
+      email: '', // Should be populated by useEffect from authUser
       profile: UserProfileSchema.parse({}), 
     },
   });
@@ -84,11 +84,11 @@ export function ProfileForm() {
         profileToSet = UserProfileSchema.parse({});
       }
       form.reset({
-        firstName: userData.firstName || '', 
+        firstName: userData.firstName || '',
         lastName: userData.lastName || '',
-        email: userData.email || '', 
+        email: authUser?.email || '', // Prefer authUser email for display
         profile: profileToSet,
-      });
+      }, { keepDirty: false }); // Reset dirty state when loading data
     } else if (authUser && !isUserDataLoading && !userDataError) {
       // New user or user with no Firestore doc yet
       const defaultProfile = UserProfileSchema.parse({});
@@ -96,10 +96,10 @@ export function ProfileForm() {
         firstName: authUser.displayName?.split(' ')[0] || '',
         lastName: authUser.displayName?.split(' ').slice(1).join(' ') || '',
         email: authUser.email || '', 
-        profile: defaultProfile,
-      });
+        profile: defaultProfile, // Initialize with schema defaults
+      }, { keepDirty: false }); // Reset dirty state for new user or no data
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData, authUser, form.reset, isUserDataLoading, userDataError]);
 
 
