@@ -54,11 +54,12 @@ export function AppSidebar() {
         <Link href="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/90">
           {/* Replace Footprints icon with Image component for the logo */}
           <Image 
-            src="/assets/img/logo.jpg" // Assumes logo.jpg is in public/assets/img/
+            src="/images/logo.jpg" // Corrected path: Assumes logo.jpg is in public/images/
             alt="Shut Up and Run Logo" 
             width={28} // Corresponds to h-7
             height={28} // Corresponds to w-7
             className="h-7 w-7" // Maintain similar sizing as original icon
+            data-ai-hint="logo running shoe"
           />
           <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">Shut Up and Run</span>
         </Link>
@@ -106,6 +107,7 @@ export function AppSidebar() {
                   height={47}
                   style={{ height: '60px', width: '217px' }} // Keep inline styles as they were in the img tag
                   priority // Preload the image if it's important for LCP
+                  data-ai-hint="coffee button"
                 />
               </a>
             </div>
