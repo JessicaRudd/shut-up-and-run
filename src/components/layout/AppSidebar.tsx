@@ -3,15 +3,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-// Removed Script import as it's no longer used for BMC button
-import Image from 'next/image'; // For the new BMC image
+import Image from 'next/image'; // For the new BMC image AND the app logo
 import {
   LayoutDashboard,
   User,
   CalendarCheck,
   MessageSquareText,
   LogOut,
-  Footprints,
+  // Footprints, // Replaced by logo
   Coffee, 
 } from 'lucide-react';
 import {
@@ -53,7 +52,14 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" side="left" variant="sidebar">
       <SidebarHeader className="justify-between">
         <Link href="/dashboard" className="flex items-center gap-2 text-primary hover:text-primary/90">
-          <Footprints className="h-7 w-7" />
+          {/* Replace Footprints icon with Image component for the logo */}
+          <Image 
+            src="/assets/img/logo.jpg" // Assumes logo.jpg is in public/assets/img/
+            alt="Shut Up and Run Logo" 
+            width={28} // Corresponds to h-7
+            height={28} // Corresponds to w-7
+            className="h-7 w-7" // Maintain similar sizing as original icon
+          />
           <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">Shut Up and Run</span>
         </Link>
         <SidebarTrigger className="hidden md:flex data-[collapsible=icon]:hidden" />
